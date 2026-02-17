@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserEntity } from './user.entity';
@@ -18,15 +18,35 @@ export class UsersService {
     return this.usersRepo.findOne({ where: { email } });
   }
 
+  async findByNickname(nickname: string): Promise<UserEntity | null> {
+    return this.usersRepo.findOne({ where: { nickname } });
+  }
+
+  /** 닉네임 중복 체크 — 사용 가능하면 true */
+  async isNicknameAvailable(nickname: string, excludeUserId?: string): Promise<boolean> {
+    const existing = await this.findByNickname(nickname);
+    if (!existing) return true;
+    return excludeUserId ? existing.id === excludeUserId : false;
+  }
+
   async create(data: {
     email: string;
     nickname: string;
     authProvider: string;
     profileImage: string | null;
   }): Promise<UserEntity> {
+    // 닉네임 충돌 시 숫자 붙여서 재시도
+    let finalNickname = data.nickname;
+    let attempts = 0;
+    while (!(await this.isNicknameAvailable(finalNickname)) && attempts < 10) {
+      finalNickname = `${data.nickname}${Math.floor(Math.random() * 9999)}`;
+      attempts++;
+    }
+
     const user = this.usersRepo.create({
       ...data,
-      primaryRegionId: '00000000-0000-0000-0000-000000000000', // 임시 - 동네 인증 전
+      nickname: finalNickname,
+      primaryRegionId: '00000000-0000-0000-0000-000000000000',
       eloRating: 1000,
       isPublic: false,
     });
@@ -34,6 +54,14 @@ export class UsersService {
   }
 
   async updateProfile(userId: string, data: Partial<UserEntity>): Promise<UserEntity> {
+    // 닉네임 변경 시 중복 체크
+    if (data.nickname) {
+      const available = await this.isNicknameAvailable(data.nickname, userId);
+      if (!available) {
+        throw new ConflictException('이미 사용 중인 닉네임입니다.');
+      }
+    }
+
     await this.usersRepo.update(userId, data);
     const user = await this.findById(userId);
     if (!user) throw new NotFoundException('User not found');

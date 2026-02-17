@@ -44,6 +44,10 @@ class ApiClient {
     return this.request('/users/me', { method: 'PATCH', body: JSON.stringify(data) });
   }
 
+  checkNickname(nickname: string) {
+    return this.request<{ available: boolean; reason: string | null }>(`/users/nickname/check?nickname=${encodeURIComponent(nickname)}`);
+  }
+
   verifyRegion(latitude: number, longitude: number) {
     return this.request('/users/region/verify', {
       method: 'POST',
