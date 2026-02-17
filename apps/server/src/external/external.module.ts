@@ -4,11 +4,12 @@ import { ExternalAccountEntity } from './external-account.entity';
 import { ExternalService } from './external.service';
 import { ExternalController } from './external.controller';
 import { RiotApiService } from './riot-api.service';
+import { NexonApiService } from './nexon-api.service';
 
 @Module({
   imports: [TypeOrmModule.forFeature([ExternalAccountEntity])],
   controllers: [ExternalController],
-  providers: [ExternalService, RiotApiService],
-  exports: [ExternalService, RiotApiService],
+  providers: [ExternalService, RiotApiService, NexonApiService],
+  exports: [ExternalService, RiotApiService, NexonApiService],
 })
 export class ExternalModule {}

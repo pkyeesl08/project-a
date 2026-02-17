@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ExternalAccountEntity } from './external-account.entity';
 import { RiotApiService, tierToScore, tierToKorean } from './riot-api.service';
+import { NexonApiService, fcDivisionToScore } from './nexon-api.service';
 
 @Injectable()
 export class ExternalService {
@@ -10,7 +11,154 @@ export class ExternalService {
     @InjectRepository(ExternalAccountEntity)
     private externalRepo: Repository<ExternalAccountEntity>,
     private riotApi: RiotApiService,
+    private nexonApi: NexonApiService,
   ) {}
+
+  /* ══════════════════════════════════════
+   * 메이플스토리
+   * ══════════════════════════════════════ */
+
+  /** 메이플 캐릭터 조회 (연동 전 미리보기) */
+  async lookupMaple(characterName: string) {
+    return this.nexonApi.mapleGetPlayerInfo(characterName);
+  }
+
+  /** 메이플 계정 연동 */
+  async connectMaple(userId: string, characterName: string) {
+    const existing = await this.externalRepo.findOne({
+      where: { userId, platform: 'nexon', game: 'maplestory' },
+    });
+    if (existing) throw new BadRequestException('이미 메이플스토리 계정이 연동되어 있습니다.');
+
+    const info = await this.nexonApi.mapleGetPlayerInfo(characterName);
+
+    const account = this.externalRepo.create({
+      userId,
+      platform: 'nexon',
+      game: 'maplestory',
+      externalId: info.ocid,
+      gameName: info.characterName,
+      tier: `Lv.${info.level} ${info.class}`,
+      tierScore: info.level,  // 레벨 기준 정렬
+      stats: {
+        world: info.world,
+        class: info.class,
+        level: info.level,
+        combatPower: info.combatPower,
+        guild: info.guild,
+        image: info.image,
+        expRate: info.expRate,
+      },
+      lastSyncedAt: new Date(),
+    });
+
+    return this.externalRepo.save(account);
+  }
+
+  /** 메이플 데이터 갱신 */
+  async syncMaple(userId: string) {
+    const account = await this.externalRepo.findOne({
+      where: { userId, platform: 'nexon', game: 'maplestory' },
+    });
+    if (!account) throw new NotFoundException('연동된 메이플스토리 계정이 없습니다.');
+
+    const info = await this.nexonApi.mapleGetPlayerInfo(account.gameName);
+    account.tier = `Lv.${info.level} ${info.class}`;
+    account.tierScore = info.level;
+    account.stats = {
+      world: info.world, class: info.class, level: info.level,
+      combatPower: info.combatPower, guild: info.guild,
+      image: info.image, expRate: info.expRate,
+    };
+    account.lastSyncedAt = new Date();
+
+    return this.externalRepo.save(account);
+  }
+
+  /** 동네/학교별 메이플 랭킹 (레벨순) */
+  async getMapleRanking(scope: 'region' | 'school', scopeId: string, limit = 50) {
+    const qb = this.externalRepo
+      .createQueryBuilder('ext')
+      .innerJoinAndSelect('ext.user', 'user')
+      .where('ext.game = :game', { game: 'maplestory' })
+      .andWhere('ext.tierScore > 0')
+      .orderBy('ext.tierScore', 'DESC')
+      .limit(limit);
+
+    if (scope === 'region') {
+      qb.andWhere('user.primaryRegionId = :scopeId', { scopeId });
+    } else {
+      qb.andWhere('user.schoolId = :scopeId', { scopeId });
+    }
+
+    const results = await qb.getMany();
+    return results.map((acc, i) => ({
+      rank: i + 1,
+      userId: acc.userId,
+      nickname: acc.user?.nickname,
+      characterName: acc.gameName,
+      tier: acc.tier,
+      level: acc.tierScore,
+      stats: acc.stats,
+      lastSynced: acc.lastSyncedAt,
+    }));
+  }
+
+  /* ══════════════════════════════════════
+   * FC 온라인
+   * ══════════════════════════════════════ */
+
+  /** FC온라인 조회 (연동 전 미리보기) */
+  async lookupFcOnline(nickname: string) {
+    return this.nexonApi.fcGetPlayerInfo(nickname);
+  }
+
+  /** FC온라인 계정 연동 */
+  async connectFcOnline(userId: string, nickname: string) {
+    const existing = await this.externalRepo.findOne({
+      where: { userId, platform: 'nexon', game: 'fconline' },
+    });
+    if (existing) throw new BadRequestException('이미 FC 온라인 계정이 연동되어 있습니다.');
+
+    const info = await this.nexonApi.fcGetPlayerInfo(nickname);
+
+    // 공식경기 최고 등급 찾기
+    const officialDiv = info.maxDivision.find(d => d.matchType === '공식경기');
+    const tierText = officialDiv ? officialDiv.division : '등급 없음';
+
+    const account = this.externalRepo.create({
+      userId,
+      platform: 'nexon',
+      game: 'fconline',
+      externalId: info.ouid,
+      gameName: info.nickname,
+      tier: tierText,
+      tierScore: officialDiv ? fcDivisionToScore(parseInt(info.ouid, 10) || 0) : 0,
+      stats: {
+        level: info.level,
+        maxDivision: info.maxDivision,
+      },
+      lastSyncedAt: new Date(),
+    });
+
+    return this.externalRepo.save(account);
+  }
+
+  /** FC온라인 데이터 갱신 */
+  async syncFcOnline(userId: string) {
+    const account = await this.externalRepo.findOne({
+      where: { userId, platform: 'nexon', game: 'fconline' },
+    });
+    if (!account) throw new NotFoundException('연동된 FC 온라인 계정이 없습니다.');
+
+    const info = await this.nexonApi.fcGetPlayerInfo(account.gameName);
+    const officialDiv = info.maxDivision.find(d => d.matchType === '공식경기');
+    account.tier = officialDiv ? officialDiv.division : '등급 없음';
+    account.stats = { level: info.level, maxDivision: info.maxDivision };
+    account.lastSyncedAt = new Date();
+
+    return this.externalRepo.save(account);
+  }
 
   /**
    * LoL 계정 연동 — Riot ID로 실제 API 조회 후 저장

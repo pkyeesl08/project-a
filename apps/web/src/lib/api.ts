@@ -143,6 +143,34 @@ class ApiClient {
       tier: string; tierScore: number; soloRank: any; lastSynced: string;
     }[]>(`/external/lol/ranking?scope=${scope}&scopeId=${scopeId}&limit=${limit}`);
   }
+
+  // MapleStory
+  lookupMaple(characterName: string) {
+    return this.request<{
+      ocid: string; characterName: string; world: string; class: string;
+      level: number; combatPower: number; guild: string | null; image: string;
+    }>(`/external/maple/lookup?characterName=${encodeURIComponent(characterName)}`);
+  }
+
+  connectMaple(characterName: string) {
+    return this.request('/external/maple/connect', { method: 'POST', body: JSON.stringify({ characterName }) });
+  }
+
+  syncMaple() {
+    return this.request('/external/maple/sync', { method: 'POST' });
+  }
+
+  // FC Online
+  lookupFcOnline(nickname: string) {
+    return this.request<{
+      ouid: string; nickname: string; level: number;
+      maxDivision: { matchType: string; division: string; achievementDate: string }[];
+    }>(`/external/fc/lookup?nickname=${encodeURIComponent(nickname)}`);
+  }
+
+  connectFcOnline(nickname: string) {
+    return this.request('/external/fc/connect', { method: 'POST', body: JSON.stringify({ nickname }) });
+  }
 }
 
 export const api = new ApiClient();

@@ -9,10 +9,10 @@ export class ExternalAccountEntity {
   @Column({ type: 'uuid' })
   userId: string;
 
-  @Column({ type: 'enum', enum: ['riot', 'battlenet', 'nexon'] })
+  @Column({ type: 'varchar', length: 20 })
   platform: string;
 
-  @Column({ type: 'enum', enum: ['lol', 'valorant', 'ow2', 'fifaonline'] })
+  @Column({ type: 'varchar', length: 20 })
   game: string;
 
   @Column({ type: 'varchar', length: 255 })
