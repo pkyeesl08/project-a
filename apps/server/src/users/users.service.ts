@@ -35,17 +35,8 @@ export class UsersService {
     authProvider: string;
     profileImage: string | null;
   }): Promise<UserEntity> {
-    // 닉네임 충돌 시 숫자 붙여서 재시도
-    let finalNickname = data.nickname;
-    let attempts = 0;
-    while (!(await this.isNicknameAvailable(finalNickname)) && attempts < 10) {
-      finalNickname = `${data.nickname}${Math.floor(Math.random() * 9999)}`;
-      attempts++;
-    }
-
     const user = this.usersRepo.create({
       ...data,
-      nickname: finalNickname,
       primaryRegionId: '00000000-0000-0000-0000-000000000000',
       eloRating: 1000,
       isPublic: false,

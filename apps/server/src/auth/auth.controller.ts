@@ -1,7 +1,7 @@
 import { Controller, Post, Delete, Body, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
-import { LoginDto, RefreshDto } from '../common/dto';
+import { LoginDto, RefreshDto, RegisterDto } from '../common/dto';
 import { ok } from '../common/response';
 
 @Controller('auth')
@@ -11,6 +11,12 @@ export class AuthController {
   @Post('login')
   async login(@Body() dto: LoginDto) {
     return ok(await this.authService.login(dto.provider, dto.token));
+  }
+
+  /** 회원가입 완료 — 닉네임 확정 */
+  @Post('register')
+  async register(@Body() dto: RegisterDto) {
+    return ok(await this.authService.register(dto.registerToken, dto.nickname));
   }
 
   @Post('refresh')

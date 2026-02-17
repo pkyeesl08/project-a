@@ -29,9 +29,26 @@ class ApiClient {
 
   // Auth
   login(provider: string, token: string) {
-    return this.request<{ accessToken: string; refreshToken: string; user: { id: string; nickname: string; isNewUser: boolean } }>('/auth/login', {
+    return this.request<{
+      accessToken: string | null;
+      refreshToken: string | null;
+      registerToken?: string;
+      user: { id: string; nickname: string; isNewUser: boolean } | null;
+      isNewUser?: boolean;
+    }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ provider, token }),
+    });
+  }
+
+  register(registerToken: string, nickname: string) {
+    return this.request<{
+      accessToken: string;
+      refreshToken: string;
+      user: { id: string; nickname: string; isNewUser: boolean };
+    }>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ registerToken, nickname }),
     });
   }
 

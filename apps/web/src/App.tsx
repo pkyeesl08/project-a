@@ -7,6 +7,7 @@ import RankingsPage from './pages/RankingsPage';
 import MapPage from './pages/MapPage';
 import BattlePage from './pages/BattlePage';
 import ProfilePage from './pages/ProfilePage';
+import RegisterPage from './pages/RegisterPage';
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
         <Route path="/profile" element={<ProfilePage />} />
       </Route>
       <Route path="/play/:gameType" element={<GamePlayPage />} />
+      <Route path="/register" element={<RegisterPage />} />
     </Routes>
   );
 }
