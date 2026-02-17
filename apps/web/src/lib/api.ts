@@ -115,6 +115,34 @@ class ApiClient {
   getExternalAccounts() {
     return this.request('/external/accounts');
   }
+
+  // LoL
+  lookupLol(riotId: string) {
+    return this.request<{
+      puuid: string;
+      gameName: string;
+      tagLine: string;
+      summonerLevel: number;
+      profileIconId: number;
+      soloRank: { tier: string; rank: string; lp: number; wins: number; losses: number; winRate: string } | null;
+      flexRank: { tier: string; rank: string; lp: number; wins: number; losses: number; winRate: string } | null;
+    }>(`/external/lol/lookup?riotId=${encodeURIComponent(riotId)}`);
+  }
+
+  connectLol(riotId: string) {
+    return this.request('/external/lol/connect', { method: 'POST', body: JSON.stringify({ riotId }) });
+  }
+
+  syncLol() {
+    return this.request('/external/lol/sync', { method: 'POST' });
+  }
+
+  getLolRanking(scope: 'region' | 'school', scopeId: string, limit = 50) {
+    return this.request<{
+      rank: number; userId: string; nickname: string; gameName: string;
+      tier: string; tierScore: number; soloRank: any; lastSynced: string;
+    }[]>(`/external/lol/ranking?scope=${scope}&scopeId=${scopeId}&limit=${limit}`);
+  }
 }
 
 export const api = new ApiClient();

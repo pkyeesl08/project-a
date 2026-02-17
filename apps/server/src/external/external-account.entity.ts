@@ -24,6 +24,10 @@ export class ExternalAccountEntity {
   @Column({ type: 'varchar', length: 50, nullable: true })
   tier: string | null;
 
+  /** 티어를 숫자로 변환한 값 — 랭킹 정렬용 (높을수록 높은 티어) */
+  @Column({ type: 'integer', default: 0 })
+  tierScore: number;
+
   @Column({ type: 'jsonb', nullable: true })
   stats: Record<string, unknown> | null;
 

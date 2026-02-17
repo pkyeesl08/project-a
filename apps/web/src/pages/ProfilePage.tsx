@@ -20,10 +20,6 @@ const MOCK_PROFILE = {
     { type: GameType.LIGHTNING_REACTION, rank: 12, score: 156 },
     { type: GameType.TIMING_HIT, rank: 28, score: 42 },
   ],
-  externalAccounts: [
-    { game: 'League of Legends', gameName: 'FastTiger#KR1', tier: '다이아몬드 2', icon: '🎮' },
-    { game: 'VALORANT', gameName: 'FastTiger#8888', tier: '어센던트 1', icon: '🔫' },
-  ],
 };
 
 type Tab = 'stats' | 'games' | 'external';
@@ -373,28 +369,175 @@ function GamesTab() {
 }
 
 function ExternalTab() {
+  const [riotId, setRiotId] = useState('');
+  const [lookupResult, setLookupResult] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [connected, setConnected] = useState(false);
+
+  const TIER_COLORS: Record<string, string> = {
+    IRON: 'text-gray-400', BRONZE: 'text-amber-700', SILVER: 'text-gray-300',
+    GOLD: 'text-yellow-500', PLATINUM: 'text-cyan-400', EMERALD: 'text-emerald-400',
+    DIAMOND: 'text-blue-400', MASTER: 'text-purple-400',
+    GRANDMASTER: 'text-red-500', CHALLENGER: 'text-yellow-300',
+  };
+
+  const TIER_KR: Record<string, string> = {
+    IRON: '아이언', BRONZE: '브론즈', SILVER: '실버', GOLD: '골드',
+    PLATINUM: '플래티넘', EMERALD: '에메랄드', DIAMOND: '다이아몬드',
+    MASTER: '마스터', GRANDMASTER: '그랜드마스터', CHALLENGER: '챌린저',
+  };
+
+  const handleLookup = async () => {
+    if (!riotId.includes('#')) {
+      setError('"닉네임#태그" 형식으로 입력해주세요. (예: Hide on bush#KR1)');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    setLookupResult(null);
+    try {
+      const result = await api.lookupLol(riotId);
+      setLookupResult(result);
+    } catch (err: any) {
+      setError(err.message || '소환사를 찾을 수 없습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConnect = async () => {
+    setLoading(true);
+    try {
+      await api.connectLol(riotId);
+      setConnected(true);
+    } catch (err: any) {
+      setError(err.message || '연동에 실패했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatRank = (rank: any) => {
+    if (!rank) return null;
+    const tierKr = TIER_KR[rank.tier] || rank.tier;
+    const division = ['MASTER', 'GRANDMASTER', 'CHALLENGER'].includes(rank.tier) ? '' : ` ${rank.rank}`;
+    return { text: `${tierKr}${division}`, lp: rank.lp, wins: rank.wins, losses: rank.losses, winRate: rank.winRate, tier: rank.tier };
+  };
+
   return (
     <div className="space-y-3">
-      <p className="text-sm text-gray-500">외부 게임 계정을 연동하면 동네/학교 기준 랭킹을 확인할 수 있어요.</p>
-      {MOCK_PROFILE.externalAccounts.map((acc) => (
-        <div key={acc.game}
-          className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex items-center gap-3">
-          <span className="text-2xl">{acc.icon}</span>
-          <div className="flex-1">
-            <p className="font-bold text-sm">{acc.game}</p>
-            <p className="text-xs text-gray-400">{acc.gameName}</p>
-          </div>
-          <div className="text-right">
-            <p className="text-sm font-bold text-primary">{acc.tier}</p>
-            <p className="text-[10px] text-gray-400">동네 #7</p>
-          </div>
+      {/* LoL 연동 */}
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-2xl">🎮</span>
+          <h3 className="font-bold text-sm">League of Legends 연동</h3>
         </div>
-      ))}
-      <button className="w-full bg-gray-100 text-gray-600 py-3 rounded-xl font-bold text-sm border-2 border-dashed border-gray-300">
-        + 게임 계정 연동하기
-      </button>
+
+        {connected ? (
+          <div className="bg-green-50 rounded-xl p-3 text-sm text-green-700 font-bold text-center">
+            ✅ 연동 완료! 동네 LoL 랭킹에 등록되었습니다.
+          </div>
+        ) : (
+          <>
+            {/* Riot ID 입력 */}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={riotId}
+                onChange={e => { setRiotId(e.target.value); setError(''); setLookupResult(null); }}
+                placeholder="닉네임#태그 (예: Hide on bush#KR1)"
+                className="flex-1 border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-primary"
+              />
+              <button onClick={handleLookup} disabled={loading || !riotId}
+                className={`px-4 rounded-xl font-bold text-sm whitespace-nowrap transition-all active:scale-95 ${
+                  loading || !riotId ? 'bg-gray-100 text-gray-400' : 'bg-primary text-white'
+                }`}>
+                {loading ? '검색중...' : '검색'}
+              </button>
+            </div>
+
+            {error && <p className="text-red-500 text-xs mt-2">❌ {error}</p>}
+
+            {/* 검색 결과 카드 */}
+            {lookupResult && (
+              <div className="mt-3 bg-gray-900 text-white rounded-xl p-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <img
+                    src={`https://ddragon.leagueoflegends.com/cdn/14.1.1/img/profileicon/${lookupResult.profileIconId}.png`}
+                    className="w-12 h-12 rounded-full"
+                    alt="icon"
+                    onError={e => { (e.target as HTMLImageElement).src = ''; (e.target as HTMLImageElement).className = 'w-12 h-12 rounded-full bg-gray-700'; }}
+                  />
+                  <div>
+                    <p className="font-bold">{lookupResult.gameName}<span className="text-gray-400">#{lookupResult.tagLine}</span></p>
+                    <p className="text-xs text-gray-400">레벨 {lookupResult.summonerLevel}</p>
+                  </div>
+                </div>
+
+                {/* 솔로랭크 */}
+                {(() => {
+                  const solo = formatRank(lookupResult.soloRank);
+                  return solo ? (
+                    <div className="bg-white/10 rounded-lg p-3 mb-2">
+                      <p className="text-xs text-gray-400 mb-1">솔로 랭크</p>
+                      <p className={`text-xl font-black ${TIER_COLORS[solo.tier] || ''}`}>
+                        {solo.text} <span className="text-sm font-normal text-gray-400">{solo.lp} LP</span>
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {solo.wins}승 {solo.losses}패 · 승률 {solo.winRate}%
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="bg-white/10 rounded-lg p-3 mb-2">
+                      <p className="text-xs text-gray-400">솔로 랭크</p>
+                      <p className="text-gray-500 font-bold">언랭크</p>
+                    </div>
+                  );
+                })()}
+
+                {/* 자유랭크 */}
+                {(() => {
+                  const flex = formatRank(lookupResult.flexRank);
+                  return flex ? (
+                    <div className="bg-white/10 rounded-lg p-3">
+                      <p className="text-xs text-gray-400 mb-1">자유 랭크</p>
+                      <p className={`font-bold ${TIER_COLORS[flex.tier] || ''}`}>
+                        {flex.text} · {flex.lp} LP
+                      </p>
+                    </div>
+                  ) : null;
+                })()}
+
+                {/* 연동 버튼 */}
+                <button onClick={handleConnect} disabled={loading}
+                  className="w-full mt-3 bg-accent py-3 rounded-xl font-bold active:scale-95 transition-transform">
+                  {loading ? '연동 중...' : '이 계정으로 연동하기'}
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* 다른 게임 (준비 중) */}
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+        <h3 className="font-bold text-sm mb-2">🔜 연동 예정</h3>
+        {[
+          { icon: '🔫', name: 'VALORANT', status: '준비 중' },
+          { icon: '🛡️', name: 'Overwatch 2', status: '준비 중' },
+          { icon: '⚽', name: 'FIFA Online', status: '준비 중' },
+        ].map(g => (
+          <div key={g.name} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
+            <span className="text-xl">{g.icon}</span>
+            <span className="flex-1 text-sm">{g.name}</span>
+            <span className="text-xs text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">{g.status}</span>
+          </div>
+        ))}
+      </div>
+
       <div className="bg-blue-50 rounded-xl p-3 text-xs text-blue-600">
-        💡 현재 지원: League of Legends, VALORANT, Overwatch 2, FIFA Online
+        💡 연동하면 동네/학교 기준으로 LoL 랭킹을 확인할 수 있어요!
       </div>
     </div>
   );
