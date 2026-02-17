@@ -53,6 +53,11 @@ npm run dev:server    # localhost:3000
 | `game:start` | ← | 게임 시작 |
 | `game:action` | ↔ | 실시간 액션 |
 
+## 문서
+
+- 📘 [설치 및 실행 가이드](docs/SETUP.md) — 환경 설정부터 실행까지 상세 안내
+- 📋 [서비스 기획서](docs/PLANNING.md) — 기능 정의, DB 설계, API, 로드맵
+
 ## 기술 스택
 
 React 18 · NestJS · TypeORM · PostgreSQL · Redis · Socket.IO · Turborepo · Tailwind CSS
