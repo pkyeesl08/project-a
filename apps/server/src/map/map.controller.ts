@@ -21,4 +21,9 @@ export class MapController {
   async getHeatmap(@Query('lat') lat: string, @Query('lng') lng: string) {
     return ok(await this.mapService.getHeatmap(+lat, +lng));
   }
+
+  @Get('neighborhoods')
+  async getNeighborhoods() {
+    return ok(await this.mapService.getNeighborhoods());
+  }
 }

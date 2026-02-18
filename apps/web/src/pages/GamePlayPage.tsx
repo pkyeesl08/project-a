@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { GAME_CONFIGS, GameType, GameConfig } from '@donggamerank/shared';
 import { getGameComponent } from '../games/GameEngine';
@@ -151,6 +151,8 @@ function ResultView({ config, score, gameType, onRetry }: {
   const [result, setResult] = useState<any>(null);
   const [submitting, setSubmitting] = useState(true);
   const [completedMissions, setCompletedMissions] = useState<string[]>([]);
+  const [sharing, setSharing] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     async function submit() {
@@ -191,6 +193,102 @@ function ResultView({ config, score, gameType, onRetry }: {
   }
 
   const eloChange = result?.rankChange ?? 0;
+
+  /* ── Canvas 공유 카드 생성 ── */
+  const handleShare = useCallback(async () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    setSharing(true);
+    try {
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      const W = 480, H = 270;
+      canvas.width = W;
+      canvas.height = H;
+
+      // 배경 그라데이션
+      const bg = ctx.createLinearGradient(0, 0, W, H);
+      bg.addColorStop(0, '#1a1a2e');
+      bg.addColorStop(1, '#16213e');
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, W, H);
+
+      // 상단 강조 띠
+      const accentGrad = ctx.createLinearGradient(0, 0, W, 0);
+      accentGrad.addColorStop(0, '#7c3aed');
+      accentGrad.addColorStop(1, '#4f46e5');
+      ctx.fillStyle = accentGrad;
+      ctx.fillRect(0, 0, W, 4);
+
+      // 앱명
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.font = 'bold 14px sans-serif';
+      ctx.fillText('🎮 동겜랭크', 24, 30);
+
+      // 게임 아이콘 + 이름
+      ctx.font = '40px sans-serif';
+      ctx.fillText(config.icon, 24, 90);
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.font = 'bold 20px sans-serif';
+      ctx.fillText(config.name, 80, 72);
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.font = '12px sans-serif';
+      ctx.fillText(config.description, 80, 92);
+
+      // 점수 (대형)
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 72px sans-serif';
+      const scoreStr = String(score);
+      const scoreW = ctx.measureText(scoreStr).width;
+      ctx.fillText(scoreStr, W / 2 - scoreW / 2, 175);
+      ctx.fillStyle = 'rgba(255,255,255,0.3)';
+      ctx.font = '12px sans-serif';
+      ctx.fillText(config.scoreMetric, W / 2 - ctx.measureText(config.scoreMetric).width / 2, 195);
+
+      // 스탯 3개
+      const stats = [
+        { label: '동네 랭킹', value: result?.regionRank ? `#${result.regionRank}` : '-' },
+        { label: 'ELO', value: `${eloChange >= 0 ? '+' : ''}${eloChange}`, color: eloChange >= 0 ? '#4ade80' : '#f87171' },
+        { label: '최고 기록', value: result?.isNewHighScore ? 'NEW!' : '-', color: result?.isNewHighScore ? '#fbbf24' : undefined },
+      ];
+      stats.forEach((s, i) => {
+        const x = 24 + i * 145;
+        ctx.fillStyle = 'rgba(255,255,255,0.1)';
+        ctx.beginPath();
+        ctx.roundRect(x, 215, 130, 44, 8);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.font = '10px sans-serif';
+        ctx.fillText(s.label, x + 8, 232);
+        ctx.fillStyle = s.color ?? '#ffffff';
+        ctx.font = 'bold 16px sans-serif';
+        ctx.fillText(s.value, x + 8, 250);
+      });
+
+      // 캔버스 → Blob → 공유
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        const file = new File([blob], `동겜랭크_${config.name}_${score}.png`, { type: 'image/png' });
+        const shareText = `🎮 동겜랭크 | ${config.icon} ${config.name}\n점수: ${score} ${config.scoreMetric}${result?.regionRank ? `\n동네 랭킹 #${result.regionRank}` : ''}\n`;
+        if (navigator.canShare?.({ files: [file] })) {
+          await navigator.share({ title: '동겜랭크 결과 공유', text: shareText, files: [file] });
+        } else if (navigator.share) {
+          await navigator.share({ title: '동겜랭크 결과 공유', text: shareText });
+        } else {
+          // 공유 미지원 → 이미지 다운로드 fallback
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = file.name;
+          a.click();
+          URL.revokeObjectURL(url);
+        }
+      }, 'image/png');
+    } finally {
+      setSharing(false);
+    }
+  }, [config, score, result, eloChange]);
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-6 animate-slide-up">
@@ -244,9 +342,11 @@ function ResultView({ config, score, gameType, onRetry }: {
           className="bg-accent py-3.5 rounded-xl font-bold active:scale-95 transition-transform text-white">
           한 판 더
         </button>
-        <button onClick={() => navigate('/profile?tab=friends')}
-          className="bg-white/10 py-3.5 rounded-xl font-bold active:scale-95 transition-transform text-white text-sm">
-          친구에게 도전
+        <button
+          onClick={handleShare}
+          disabled={sharing}
+          className="bg-indigo-500/80 py-3.5 rounded-xl font-bold active:scale-95 transition-transform text-white text-sm disabled:opacity-50">
+          {sharing ? '생성 중...' : '📤 공유하기'}
         </button>
         <button onClick={() => navigate('/')}
           className="bg-white/10 py-3.5 rounded-xl font-bold active:scale-95 transition-transform text-white text-sm">
@@ -257,6 +357,8 @@ function ResultView({ config, score, gameType, onRetry }: {
           랭킹 보기
         </button>
       </div>
+      {/* 공유 카드 Canvas (숨김 — 이미지 생성용) */}
+      <canvas ref={canvasRef} className="hidden" />
     </div>
   );
 }

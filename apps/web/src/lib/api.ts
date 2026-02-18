@@ -195,6 +195,14 @@ class ApiClient {
     return this.request(`/map/users?lat=${lat}&lng=${lng}&radius=${radius}`);
   }
 
+  getNeighborhoods() {
+    return this.request<Array<{
+      district: string; city: string;
+      activeUsers: number; gamePlays: number;
+      topScore: number; onlineNow: number; intensity: number;
+    }>>('/map/neighborhoods');
+  }
+
   challengeUser(userId: string) {
     return this.request(`/map/challenge/${userId}`, { method: 'POST' });
   }

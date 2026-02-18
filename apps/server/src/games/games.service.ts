@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { GameResultEntity } from './game-result.entity';
@@ -9,6 +9,49 @@ import { MissionsService } from '../missions/missions.service';
 import { AchievementsService } from '../achievements/achievements.service';
 import { AvatarService } from '../avatar/avatar.service';
 import { normalizeScore, calculateElo, calculateSoloEloAdjustment, GameType, GAME_CONFIGS } from '@donggamerank/shared';
+
+/** 게임별 클라이언트 제출 가능한 최대 raw 점수 — 조작 차단용 */
+const RAW_SCORE_LIMITS: Partial<Record<GameType, number>> = {
+  [GameType.TIMING_HIT]:          5000,   // ms (0 = 완벽, 최대 durationMs)
+  [GameType.SPEED_TAP]:           200,    // 탭 횟수 (5초 × 40tps 여유치)
+  [GameType.LIGHTNING_REACTION]:  5000,   // ms
+  [GameType.BALLOON_POP]:         60,     // 5초 게임 최대
+  [GameType.WHACK_A_MOLE]:        60,
+  [GameType.MEMORY_FLASH]:        100,    // 정확도 %
+  [GameType.COLOR_MATCH]:         60,
+  [GameType.BIGGER_NUMBER]:       60,
+  [GameType.SAME_PICTURE]:        5000,   // ms
+  [GameType.ODD_EVEN]:            100,    // 정답률 %
+  [GameType.DIRECTION_SWIPE]:     40,
+  [GameType.STOP_THE_BAR]:        100,    // px 오차 (0 = 완벽)
+  [GameType.RPS_SPEED]:           20,
+  [GameType.SEQUENCE_TAP]:        7000,   // score = max(0, 7000 - elapsed_ms)
+  [GameType.REVERSE_REACTION]:    15,     // 속도 포인트
+  [GameType.LINE_TRACE]:          100,    // 정확도 %
+  [GameType.TARGET_SNIPER]:       20,
+  [GameType.DARK_ROOM_TAP]:       40,
+  [GameType.SCREW_CENTER]:        100,    // px 오차
+  [GameType.LINE_GROW]:           500,    // 선 길이
+  [GameType.MATH_SPEED]:          40,
+  [GameType.SHELL_GAME]:          10,
+  [GameType.EMOJI_SORT]:          40,
+  [GameType.COUNT_MORE]:          100,    // 정답률 %
+  [GameType.DUAL_PRECISION]:      600,    // 누적 정밀도
+  [GameType.REVERSE_MEMORY]:      5,      // 정답 개수 (0~5)
+  [GameType.RAPID_AIM]:           800,    // 누적 조준 점수
+};
+
+function validateRawScore(gameType: GameType, rawScore: number): void {
+  if (!Number.isFinite(rawScore) || rawScore < 0) {
+    throw new BadRequestException('유효하지 않은 점수입니다.');
+  }
+  const maxScore = RAW_SCORE_LIMITS[gameType];
+  if (maxScore !== undefined && rawScore > maxScore) {
+    throw new BadRequestException(
+      `${gameType} 게임의 최대 허용 점수(${maxScore})를 초과했습니다.`,
+    );
+  }
+}
 
 /** 게임 완료 시 지급 코인 (솔로 기본값) */
 const COIN_REWARD_SOLO = 5;
@@ -38,6 +81,12 @@ export class GamesService {
   }) {
     const user = await this.usersService.findById(userId);
     if (!user) throw new NotFoundException('사용자를 찾을 수 없습니다.');
+
+    // 서버 측 raw 점수 검증 — 클라이언트 조작 방지
+    if (!Object.values(GameType).includes(data.gameType as GameType)) {
+      throw new BadRequestException('유효하지 않은 게임 타입입니다.');
+    }
+    validateRawScore(data.gameType as GameType, data.score);
 
     const normalized = normalizeScore(data.gameType as GameType, data.score);
 

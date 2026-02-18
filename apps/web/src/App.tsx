@@ -8,6 +8,7 @@ import MapPage from './pages/MapPage';
 import BattlePage from './pages/BattlePage';
 import ProfilePage from './pages/ProfilePage';
 import RegisterPage from './pages/RegisterPage';
+import OnboardingPage from './pages/OnboardingPage';
 import ExternalRankingPage from './pages/ExternalRankingPage';
 import AvatarPage from './pages/AvatarPage';
 
@@ -27,6 +28,7 @@ export default function App() {
       <Route path="/avatar" element={<AvatarPage />} />
       <Route path="/play/:gameType" element={<GamePlayPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/onboarding" element={<OnboardingPage />} />
     </Routes>
   );
 }

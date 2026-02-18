@@ -30,6 +30,10 @@ export class UserEntity {
   @Column({ type: 'uuid', nullable: true })
   schoolId: string | null;
 
+  /** 마지막 동네 변경 일시 — 7일 쿨다운 계산에 사용 */
+  @Column({ type: 'timestamp', nullable: true })
+  regionChangedAt: Date | null;
+
   @Column({ type: 'boolean', default: false })
   isPublic: boolean;
 
