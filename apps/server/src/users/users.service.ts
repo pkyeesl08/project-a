@@ -2,12 +2,15 @@ import { Injectable, NotFoundException, ConflictException } from '@nestjs/common
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserEntity } from './user.entity';
+import { GameResultEntity } from '../games/game-result.entity';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectRepository(UserEntity)
     private usersRepo: Repository<UserEntity>,
+    @InjectRepository(GameResultEntity)
+    private resultsRepo: Repository<GameResultEntity>,
   ) {}
 
   async findById(id: string): Promise<UserEntity | null> {
@@ -26,7 +29,9 @@ export class UsersService {
   async isNicknameAvailable(nickname: string, excludeUserId?: string): Promise<boolean> {
     const existing = await this.findByNickname(nickname);
     if (!existing) return true;
-    return excludeUserId ? existing.id === excludeUserId : false;
+    // 수정: excludeUserId와 일치하면 본인 것이므로 사용 가능
+    if (excludeUserId && existing.id === excludeUserId) return true;
+    return false;
   }
 
   async create(data: {
@@ -67,14 +72,42 @@ export class UsersService {
     const user = await this.findById(userId);
     if (!user) throw new NotFoundException('User not found');
 
-    // TODO: game_results에서 통계 집계
+    const results = await this.resultsRepo.find({
+      where: { userId },
+      order: { playedAt: 'DESC' },
+    });
+
+    const totalGames = results.length;
+    const pvpResults = results.filter(r => r.mode === 'pvp');
+    const totalWins = pvpResults.filter(r => r.metadata?.won === true).length;
+    const winRate = pvpResults.length > 0
+      ? Math.round((totalWins / pvpResults.length) * 100)
+      : 0;
+
+    // 게임별 최고 기록
+    const bestByGame: Record<string, number> = {};
+    for (const r of results) {
+      if (bestByGame[r.gameType] === undefined || r.normalizedScore > bestByGame[r.gameType]) {
+        bestByGame[r.gameType] = r.normalizedScore;
+      }
+    }
+    const bestEntry = Object.entries(bestByGame).sort((a, b) => b[1] - a[1])[0];
+    const bestGame = bestEntry ? { gameType: bestEntry[0], score: bestEntry[1] } : null;
+
+    // 연승 계산 (최근 PvP 결과부터)
+    let currentStreak = 0;
+    for (const r of pvpResults) {
+      if (r.metadata?.won === true) currentStreak++;
+      else break;
+    }
+
     return {
-      totalGames: 0,
-      totalWins: 0,
-      winRate: 0,
-      bestGame: null,
-      currentStreak: 0,
-      regionRank: null,
+      totalGames,
+      totalWins,
+      winRate,
+      bestGame,
+      currentStreak,
+      regionRank: null, // 랭킹 서비스에서 별도 조회
       schoolRank: null,
     };
   }

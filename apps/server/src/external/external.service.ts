@@ -260,38 +260,98 @@ export class ExternalService {
     }));
   }
 
-  /* ── 기존 범용 메서드 (다른 게임용) ── */
+  /* ── 범용 연동 라우터 ── */
 
   async connect(userId: string, platform: string, data: { token: string; game: string }) {
     if (platform === 'riot' && data.game === 'lol') {
-      return this.connectLol(userId, data.token);  // token에 riotId 전달
+      return this.connectLol(userId, data.token);
     }
-
-    const validCombos: Record<string, string[]> = {
-      riot: ['valorant'],
-      battlenet: ['ow2'],
-      nexon: ['fifaonline'],
-    };
-    if (!validCombos[platform]?.includes(data.game)) {
-      throw new BadRequestException('지원하지 않는 플랫폼/게임 조합입니다.');
+    if (platform === 'riot' && data.game === 'valorant') {
+      return this.connectValorant(userId, data.token);
     }
+    if (platform === 'nexon' && data.game === 'maplestory') {
+      return this.connectMaple(userId, data.token);
+    }
+    if (platform === 'nexon' && (data.game === 'fconline' || data.game === 'fifaonline')) {
+      return this.connectFcOnline(userId, data.token);
+    }
+    if (platform === 'battlenet' && data.game === 'ow2') {
+      return this.connectOw2(userId, data.token);
+    }
+    throw new BadRequestException('지원하지 않는 플랫폼/게임 조합입니다.');
+  }
 
+  /** 발로란트 — Riot ID로 PUUID 검증 후 연동 */
+  async connectValorant(userId: string, riotId: string) {
     const existing = await this.externalRepo.findOne({
-      where: { userId, platform, game: data.game },
+      where: { userId, platform: 'riot', game: 'valorant' },
     });
-    if (existing) throw new BadRequestException('이미 연동된 계정입니다.');
+    if (existing) throw new BadRequestException('이미 발로란트 계정이 연동되어 있습니다.');
 
-    // TODO: 발로란트, OW2, 피파 등 실제 연동
-    const account = this.externalRepo.create({
-      userId, platform, game: data.game,
-      externalId: `${platform}_${Date.now()}`,
-      gameName: `Player#${Math.floor(Math.random() * 9999)}`,
-      tier: 'Unranked',
+    const [gameName, tagLine] = riotId.split('#');
+    if (!gameName?.trim() || !tagLine?.trim()) {
+      throw new BadRequestException('Riot ID 형식이 올바르지 않습니다. (예: 닉네임#KR1)');
+    }
+
+    // Riot Account API로 PUUID 검증
+    const account = await this.riotApi.getAccountByRiotId(gameName.trim(), tagLine.trim());
+
+    const acct = this.externalRepo.create({
+      userId,
+      platform: 'riot',
+      game: 'valorant',
+      externalId: account.puuid,
+      gameName: `${account.gameName}#${account.tagLine}`,
+      tier: '연동됨', // 발로란트 랭크 API는 별도 지원 예정
+      tierScore: 0,
+      stats: { puuid: account.puuid },
+      lastSyncedAt: new Date(),
+    });
+
+    return this.externalRepo.save(acct);
+  }
+
+  /** 발로란트 데이터 갱신 */
+  async syncValorant(userId: string) {
+    const account = await this.externalRepo.findOne({
+      where: { userId, platform: 'riot', game: 'valorant' },
+    });
+    if (!account) throw new NotFoundException('연동된 발로란트 계정이 없습니다.');
+
+    const [gameName, tagLine] = account.gameName.split('#');
+    const info = await this.riotApi.getAccountByRiotId(gameName, tagLine);
+    account.gameName = `${info.gameName}#${info.tagLine}`;
+    account.stats = { puuid: info.puuid };
+    account.lastSyncedAt = new Date();
+
+    return this.externalRepo.save(account);
+  }
+
+  /** 오버워치 2 — BattleTag 형식 검증 후 연동 (Blizzard 공개 API 없음) */
+  async connectOw2(userId: string, battleTag: string) {
+    const existing = await this.externalRepo.findOne({
+      where: { userId, platform: 'battlenet', game: 'ow2' },
+    });
+    if (existing) throw new BadRequestException('이미 오버워치 2 계정이 연동되어 있습니다.');
+
+    // BattleTag 형식: 이름#숫자 (예: Player#1234)
+    if (!/^.+#\d{4,5}$/.test(battleTag)) {
+      throw new BadRequestException('BattleTag 형식이 올바르지 않습니다. (예: Player#1234)');
+    }
+
+    const acct = this.externalRepo.create({
+      userId,
+      platform: 'battlenet',
+      game: 'ow2',
+      externalId: battleTag.replace('#', '-'),
+      gameName: battleTag,
+      tier: '연동됨',
       tierScore: 0,
       stats: {},
       lastSyncedAt: new Date(),
     });
-    return this.externalRepo.save(account);
+
+    return this.externalRepo.save(acct);
   }
 
   async disconnect(userId: string, platform: string, game: string) {
@@ -302,9 +362,10 @@ export class ExternalService {
   }
 
   async sync(userId: string, platform: string, game: string) {
-    if (platform === 'riot' && game === 'lol') {
-      return this.syncLol(userId);
-    }
+    if (platform === 'riot' && game === 'lol') return this.syncLol(userId);
+    if (platform === 'riot' && game === 'valorant') return this.syncValorant(userId);
+    if (platform === 'nexon' && game === 'maplestory') return this.syncMaple(userId);
+    if (platform === 'nexon' && (game === 'fconline' || game === 'fifaonline')) return this.syncFcOnline(userId);
     throw new BadRequestException('해당 게임의 동기화는 아직 지원하지 않습니다.');
   }
 
