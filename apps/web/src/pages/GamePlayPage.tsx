@@ -155,6 +155,7 @@ function ResultView({ config, score, gameType, gameMode, onRetry }: {
   const [submitting, setSubmitting] = useState(true);
   const [completedMissions, setCompletedMissions] = useState<string[]>([]);
   const [sharing, setSharing] = useState(false);
+  const [dailyRank, setDailyRank] = useState<{ rank: number; total: number; score: number } | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -163,6 +164,17 @@ function ResultView({ config, score, gameType, gameMode, onRetry }: {
         const metadata: Record<string, unknown> = gameMode === 'daily' ? { subMode: 'daily' } : {};
         const data: any = await api.submitResult({ gameType, score, mode: 'solo', metadata });
         setResult(data);
+
+        // 게임 완료 후 현재 동네 배틀에 자동 기여 (백그라운드)
+        api.getCurrentBattle()
+          .then(b => b?.id && api.contributeToCurrentBattle(b.id, score))
+          .catch(() => {});
+
+        // daily 모드: 내 오늘 순위 조회
+        if (gameMode === 'daily') {
+          api.getMyDailyRank().then(setDailyRank).catch(() => {});
+        }
+
         // 미션 완료 여부 확인
         try {
           const missions: DailyMission[] = await api.getMissions();
@@ -340,6 +352,15 @@ function ResultView({ config, score, gameType, gameMode, onRetry }: {
         )}
       </div>
 
+      {/* daily 모드: 오늘의 순위 패널 */}
+      {gameMode === 'daily' && dailyRank && (
+        <div className="bg-white/10 rounded-2xl p-4 mb-4 w-full max-w-xs text-center">
+          <p className="text-white/40 text-xs mb-2">⭐ 오늘의 게임 내 순위</p>
+          <p className="text-3xl font-black text-accent">#{dailyRank.rank}</p>
+          <p className="text-white/30 text-xs mt-1">전체 {dailyRank.total}명 중</p>
+        </div>
+      )}
+
       {/* 행동 버튼 2×2 */}
       <div className="grid grid-cols-2 gap-2.5 w-full max-w-xs">
         {gameMode === 'daily' ? (
@@ -363,7 +384,7 @@ function ResultView({ config, score, gameType, gameMode, onRetry }: {
         </button>
         <button onClick={() => navigate('/')}
           className="bg-white/10 py-3.5 rounded-xl font-bold active:scale-95 transition-transform text-white text-sm">
-          오늘의 미션
+          {gameMode === 'daily' ? '홈으로' : '오늘의 미션'}
         </button>
         <button onClick={() => navigate('/rankings')}
           className="bg-white/10 py-3.5 rounded-xl font-bold active:scale-95 transition-transform text-white text-sm">

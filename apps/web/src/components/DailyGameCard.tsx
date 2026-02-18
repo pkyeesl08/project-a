@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { GAME_CONFIGS, GameType } from '@donggamerank/shared';
 import { api } from '../lib/api';
+import { useAuthStore } from '../stores/authStore';
 
 function useCountdown(endAt: string): string {
   const [label, setLabel] = useState('');
@@ -22,6 +23,7 @@ function useCountdown(endAt: string): string {
 }
 
 export default function DailyGameCard() {
+  const isLoggedIn = useAuthStore(s => s.isLoggedIn);
   const [gameType, setGameType] = useState<GameType | null>(null);
   const [endAt, setEndAt] = useState('');
   const [attempted, setAttempted] = useState(false);
@@ -31,6 +33,7 @@ export default function DailyGameCard() {
   const countdown = useCountdown(endAt || new Date(Date.now() + 86400000).toISOString());
 
   useEffect(() => {
+    // 오늘의 게임 타입은 비로그인도 확인 가능
     api.getDailyGame()
       .then((res) => {
         setGameType(res.gameType as GameType);
@@ -38,6 +41,8 @@ export default function DailyGameCard() {
       })
       .catch(() => {});
 
+    // 플레이 여부 + 순위는 로그인 필요
+    if (!isLoggedIn) return;
     api.checkDailyAttempted()
       .then((res) => {
         setAttempted(res.attempted);
@@ -47,7 +52,7 @@ export default function DailyGameCard() {
         }
       })
       .catch(() => {});
-  }, []);
+  }, [isLoggedIn]);
 
   if (!gameType) return null;
 
@@ -77,7 +82,16 @@ export default function DailyGameCard() {
       </div>
 
       {/* 이미 플레이한 경우 → 내 순위 + 리더보드 */}
-      {attempted ? (
+      {!isLoggedIn ? (
+        /* 비로그인 */
+        <Link
+          to="/register"
+          className="w-full bg-white/60 border border-accent/30 text-accent text-sm font-bold py-3 rounded-xl
+                     flex items-center justify-center gap-1 active:scale-95 transition-transform"
+        >
+          로그인하고 도전하기 →
+        </Link>
+      ) : attempted ? (
         <div className="space-y-2">
           {myRank && (
             <div className="bg-white/60 rounded-xl p-3 flex items-center justify-between">

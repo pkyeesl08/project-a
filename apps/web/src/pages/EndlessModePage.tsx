@@ -7,14 +7,13 @@ import { api } from '../lib/api';
 // ── 상수 ──────────────────────────────────────────
 
 const LIVES_MAX = 3;
-const ROUND_BASE_MS = 4000;    // 1라운드 제한시간
-const ROUND_DECAY_MS = 200;    // 라운드마다 200ms 감소
-const ROUND_MIN_MS = 1500;     // 최솟값
-const PASS_THRESHOLD = 1;      // 이 이상 득점해야 클리어 (0점 = 실패)
+const ROUND_BASE_MS = 4000;   // 1라운드 제한시간
+const ROUND_DECAY_MS = 200;   // 라운드마다 200ms 감소
+const ROUND_MIN_MS = 1500;    // 최솟값
+const PASS_THRESHOLD = 1;     // 이 이상 득점해야 클리어
 const COUNTDOWN_SEC = 3;
-const TRANSITION_MS = 1200;    // 라운드 결과 표시 시간
+const TRANSITION_MS = 1200;   // 라운드 결과 표시 시간
 
-// Endless에 사용할 게임 목록 (빠른 반응 위주 + 전 카테고리 균형)
 const ENDLESS_POOL: GameType[] = [
   GameType.SPEED_TAP,
   GameType.LIGHTNING_REACTION,
@@ -35,16 +34,14 @@ const ENDLESS_POOL: GameType[] = [
   GameType.COUNT_MORE,
 ];
 
-function pickRandom(pool: GameType[], exclude?: GameType): GameType {
-  const filtered = pool.filter(t => t !== exclude);
-  return filtered[Math.floor(Math.random() * filtered.length)];
+function pickRandom(exclude?: GameType): GameType {
+  const pool = ENDLESS_POOL.filter(t => t !== exclude);
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 function roundDuration(round: number): number {
   return Math.max(ROUND_MIN_MS, ROUND_BASE_MS - round * ROUND_DECAY_MS);
 }
-
-// ── 타입 ──────────────────────────────────────────
 
 type Phase = 'idle' | 'countdown' | 'playing' | 'transition' | 'gameover';
 
@@ -53,34 +50,52 @@ type Phase = 'idle' | 'countdown' | 'playing' | 'transition' | 'gameover';
 export default function EndlessModePage() {
   const navigate = useNavigate();
 
+  // UI 상태
   const [phase, setPhase] = useState<Phase>('idle');
-  const [round, setRound] = useState(0);          // 클리어한 라운드 수
+  const [round, setRound] = useState(0);
   const [lives, setLives] = useState(LIVES_MAX);
   const [countdown, setCountdown] = useState(COUNTDOWN_SEC);
   const [timeLeft, setTimeLeft] = useState(0);
   const [currentGame, setCurrentGame] = useState<GameType>(ENDLESS_POOL[0]);
-  const [roundPassed, setRoundPassed] = useState<boolean | null>(null); // transition에서 표시
+  const [roundPassed, setRoundPassed] = useState<boolean | null>(null);
+  const [displayScore, setDisplayScore] = useState(0);
   const [submitting, setSubmitting] = useState(false);
 
-  // 라운드 중 점수 추적 (ref: 비동기 타이머와 동기화)
+  // Refs — 콜백 내에서 최신 값 참조 (stale closure 방지)
+  const phaseRef = useRef<Phase>('idle');
+  const roundRef = useRef(0);
+  const livesRef = useRef(LIVES_MAX);
+  const currentGameRef = useRef<GameType>(ENDLESS_POOL[0]);
   const scoreRef = useRef(0);
-  const [displayScore, setDisplayScore] = useState(0);
 
-  // ── 라운드 시작 ──────────────────────────────────
+  // Ref + state 동시 업데이트 헬퍼
+  const setPhaseSync = useCallback((p: Phase) => { phaseRef.current = p; setPhase(p); }, []);
+  const setRoundSync = useCallback((v: number) => { roundRef.current = v; setRound(v); }, []);
+  const setLivesSync = useCallback((v: number) => { livesRef.current = v; setLives(v); }, []);
+
+  // ── startRound ───────────────────────────────────
 
   const startRound = useCallback((nextRound: number, prevGame?: GameType) => {
-    const game = pickRandom(ENDLESS_POOL, prevGame);
+    const game = pickRandom(prevGame);
+    currentGameRef.current = game;
     setCurrentGame(game);
     scoreRef.current = 0;
     setDisplayScore(0);
     setCountdown(COUNTDOWN_SEC);
     setTimeLeft(roundDuration(nextRound));
-    setPhase('countdown');
-  }, []);
+    setPhaseSync('countdown');
+  }, [setPhaseSync]);
+
+  // ── handleStart ──────────────────────────────────
 
   const handleStart = useCallback(() => {
+    roundRef.current = 0;
+    livesRef.current = LIVES_MAX;
+    scoreRef.current = 0;
     setRound(0);
     setLives(LIVES_MAX);
+    setDisplayScore(0);
+    setRoundPassed(null);
     startRound(0);
   }, [startRound]);
 
@@ -88,50 +103,42 @@ export default function EndlessModePage() {
 
   useEffect(() => {
     if (phase !== 'countdown') return;
-    if (countdown <= 0) {
-      setPhase('playing');
-      return;
-    }
+    if (countdown <= 0) { setPhaseSync('playing'); return; }
     const t = setTimeout(() => setCountdown(c => c - 1), 1000);
     return () => clearTimeout(t);
-  }, [phase, countdown]);
+  }, [phase, countdown, setPhaseSync]);
+
+  // ── 라운드 종료 (ref 기반으로 stale closure 없음) ──
+
+  const endRound = useCallback(() => {
+    if (phaseRef.current !== 'playing') return; // 이중 호출 방지
+    const passed = scoreRef.current >= PASS_THRESHOLD;
+    setRoundPassed(passed);
+    setPhaseSync('transition');
+
+    if (passed) {
+      const next = roundRef.current + 1;
+      setRoundSync(next);
+      setTimeout(() => startRound(next, currentGameRef.current), TRANSITION_MS);
+    } else {
+      const nextLives = livesRef.current - 1;
+      setLivesSync(nextLives);
+      if (nextLives <= 0) {
+        setTimeout(() => setPhaseSync('gameover'), TRANSITION_MS);
+      } else {
+        setTimeout(() => startRound(roundRef.current, currentGameRef.current), TRANSITION_MS);
+      }
+    }
+  }, [setPhaseSync, setRoundSync, setLivesSync, startRound]);
 
   // ── 게임 타이머 ──────────────────────────────────
 
   useEffect(() => {
     if (phase !== 'playing') return;
-    if (timeLeft <= 0) {
-      endRound();
-      return;
-    }
+    if (timeLeft <= 0) { endRound(); return; }
     const t = setTimeout(() => setTimeLeft(ms => ms - 100), 100);
     return () => clearTimeout(t);
-  }, [phase, timeLeft]);
-
-  // ── 라운드 종료 ──────────────────────────────────
-
-  const endRound = useCallback(() => {
-    const passed = scoreRef.current >= PASS_THRESHOLD;
-    setRoundPassed(passed);
-    setPhase('transition');
-
-    let nextLives = lives;
-    let nextRound = round;
-
-    if (passed) {
-      nextRound = round + 1;
-      setRound(nextRound);
-    } else {
-      nextLives = lives - 1;
-      setLives(nextLives);
-    }
-
-    if (nextLives <= 0) {
-      setTimeout(() => setPhase('gameover'), TRANSITION_MS);
-    } else {
-      setTimeout(() => startRound(nextRound, currentGame), TRANSITION_MS);
-    }
-  }, [lives, round, currentGame, startRound]);
+  }, [phase, timeLeft, endRound]);
 
   // ── 게임 스코어 콜백 ─────────────────────────────
 
@@ -145,40 +152,30 @@ export default function EndlessModePage() {
     setDisplayScore(total);
   }, []);
 
-  // ── 결과 제출 ────────────────────────────────────
-
-  const submitScore = useCallback(async () => {
-    if (submitting) return;
-    setSubmitting(true);
-    try {
-      await api.submitResult({
-        gameType: GameType.SPEED_TAP, // 대표 게임 타입으로 제출
-        score: round,
-        mode: 'solo',
-        metadata: { subMode: 'endless', rounds: round, maxLives: LIVES_MAX },
-      });
-    } catch {
-      // 제출 실패 무시 — 오프라인 대응
-    } finally {
-      setSubmitting(false);
-    }
-  }, [round, submitting]);
+  // ── 게임오버 → 결과 서버 제출 ────────────────────
 
   useEffect(() => {
-    if (phase === 'gameover') {
-      submitScore();
-    }
-  }, [phase]);
+    if (phase !== 'gameover' || submitting) return;
+    setSubmitting(true);
+    api.submitResult({
+      gameType: GameType.SPEED_TAP,
+      score: roundRef.current,
+      mode: 'solo',
+      metadata: { subMode: 'endless', rounds: roundRef.current },
+    })
+      .catch(() => {})
+      .finally(() => setSubmitting(false));
+  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── 렌더링 ───────────────────────────────────────
+  // ── 렌더 ─────────────────────────────────────────
 
   const GameComponent = getGameComponent(currentGame);
   const config = GAME_CONFIGS[currentGame];
-  const progress = timeLeft / roundDuration(round);
+  const progress = timeLeft / roundDuration(roundRef.current);
 
   return (
     <div className="game-fullscreen flex flex-col text-white bg-gray-950">
-      {/* 닫기 버튼 */}
+      {/* 닫기 */}
       <button
         onClick={() => navigate(-1)}
         className="absolute top-4 left-4 z-50 w-10 h-10 bg-white/10 rounded-full
@@ -187,16 +184,16 @@ export default function EndlessModePage() {
         ✕
       </button>
 
-      {/* ── IDLE: 시작 화면 ── */}
+      {/* ── IDLE ── */}
       {phase === 'idle' && (
         <div className="flex-1 flex flex-col items-center justify-center px-8 gap-5 animate-slide-up">
           <p className="text-5xl">♾️</p>
           <h1 className="text-3xl font-black text-center">Endless 생존 챌린지</h1>
-          <div className="bg-white/10 rounded-2xl p-5 w-full max-w-xs text-sm space-y-2">
-            <p>🎮 라운드마다 <strong>랜덤 미니게임</strong> 등장</p>
-            <p>⚡ 점점 빨라지는 제한시간</p>
+          <div className="bg-white/10 rounded-2xl p-5 w-full max-w-xs text-sm space-y-2 text-white/80">
+            <p>🎮 라운드마다 <strong className="text-white">랜덤 미니게임</strong> 등장</p>
+            <p>⚡ 매 라운드 <strong className="text-white">200ms씩 빨라짐</strong></p>
             <p>❤️ 목숨 {LIVES_MAX}개 — 0점이면 목숨 1개 소모</p>
-            <p>🏆 목숨이 다하면 게임 종료</p>
+            <p>🏆 목숨이 다하면 종료 · 클리어 라운드로 순위 결정</p>
           </div>
           <button
             onClick={handleStart}
@@ -219,10 +216,11 @@ export default function EndlessModePage() {
               {countdown > 0 ? countdown : 'GO!'}
             </span>
           </div>
-          {/* 목숨 표시 */}
-          <div className="flex gap-1">
+          <div className="flex gap-1.5 mt-2">
             {Array.from({ length: LIVES_MAX }).map((_, i) => (
-              <span key={i} className={`text-xl ${i < lives ? 'opacity-100' : 'opacity-20'}`}>❤️</span>
+              <span key={i} className={`text-2xl transition-opacity ${i < lives ? 'opacity-100' : 'opacity-20'}`}>
+                ❤️
+              </span>
             ))}
           </div>
         </div>
@@ -245,17 +243,17 @@ export default function EndlessModePage() {
           <div className="flex items-center justify-between px-5 py-2">
             <div className="flex gap-1">
               {Array.from({ length: LIVES_MAX }).map((_, i) => (
-                <span key={i} className={`text-base ${i < lives ? 'opacity-100' : 'opacity-20'}`}>❤️</span>
+                <span key={i} className={`text-base transition-opacity ${i < lives ? 'opacity-100' : 'opacity-20'}`}>
+                  ❤️
+                </span>
               ))}
             </div>
-            <span className="text-white/50 text-xs font-mono">
-              {config.icon} {(timeLeft / 1000).toFixed(1)}s
-            </span>
+            <div className="text-center">
+              <p className="text-white/30 text-[10px]">라운드 {round + 1}</p>
+              <p className="text-white/50 text-xs font-mono">{config.icon} {(timeLeft / 1000).toFixed(1)}s</p>
+            </div>
             <span className="bg-white/10 rounded-full px-3 py-1 font-black">{displayScore}</span>
           </div>
-
-          {/* 라운드 번호 */}
-          <p className="text-center text-white/30 text-xs pb-1">라운드 {round + 1}</p>
 
           {/* 게임 영역 */}
           <GameComponent
@@ -267,18 +265,20 @@ export default function EndlessModePage() {
         </div>
       )}
 
-      {/* ── TRANSITION: 라운드 결과 ── */}
+      {/* ── TRANSITION ── */}
       {phase === 'transition' && (
-        <div className="flex-1 flex flex-col items-center justify-center gap-3 animate-slide-up">
-          <span className="text-7xl">{roundPassed ? '✅' : '❌'}</span>
-          <p className="text-2xl font-black">{roundPassed ? '클리어!' : '실패...'}</p>
-          {!roundPassed && (
-            <div className="flex gap-1">
-              {Array.from({ length: LIVES_MAX }).map((_, i) => (
-                <span key={i} className={`text-xl ${i < lives ? 'opacity-100' : 'opacity-20'}`}>❤️</span>
-              ))}
-            </div>
-          )}
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 animate-slide-up">
+          <span className="text-7xl">{roundPassed ? '✅' : '💔'}</span>
+          <p className="text-2xl font-black">
+            {roundPassed ? `라운드 ${round} 클리어!` : '목숨 -1'}
+          </p>
+          <div className="flex gap-1.5">
+            {Array.from({ length: LIVES_MAX }).map((_, i) => (
+              <span key={i} className={`text-2xl transition-opacity ${i < lives ? 'opacity-100' : 'opacity-20'}`}>
+                ❤️
+              </span>
+            ))}
+          </div>
         </div>
       )}
 
@@ -295,16 +295,16 @@ export default function EndlessModePage() {
             </p>
           </div>
           {submitting && <p className="text-white/40 text-xs">결과 저장 중...</p>}
-          <div className="flex gap-3">
+          <div className="flex gap-3 w-full max-w-xs">
             <button
               onClick={handleStart}
-              className="bg-accent px-8 py-3.5 rounded-2xl font-bold active:scale-95 transition-transform"
+              className="flex-1 bg-accent py-3.5 rounded-2xl font-bold active:scale-95 transition-transform"
             >
               다시 도전
             </button>
             <button
               onClick={() => navigate(-1)}
-              className="bg-white/10 px-8 py-3.5 rounded-2xl font-bold active:scale-95 transition-transform"
+              className="flex-1 bg-white/10 py-3.5 rounded-2xl font-bold active:scale-95 transition-transform"
             >
               나가기
             </button>

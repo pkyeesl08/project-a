@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api, NeighborhoodBattle } from '../lib/api';
+import { useAuthStore } from '../stores/authStore';
 
 function useCountdown(endAt: string): string {
   const [label, setLabel] = useState('');
@@ -21,12 +22,14 @@ function useCountdown(endAt: string): string {
 }
 
 export default function DailyBattleBanner() {
+  const isLoggedIn = useAuthStore(s => s.isLoggedIn);
   const [battle, setBattle] = useState<NeighborhoodBattle | null>(null);
 
   useEffect(() => {
+    if (!isLoggedIn) return;
     // regionId 없이 호출 → 서버에서 JWT 유저의 primaryRegionId 사용
     api.getCurrentBattle().then(setBattle).catch(() => {});
-  }, []);
+  }, [isLoggedIn]);
 
   const countdown = useCountdown(battle?.endAt ?? new Date(Date.now() + 86400000).toISOString());
 

@@ -1,4 +1,5 @@
 import { Outlet, NavLink } from 'react-router-dom';
+import { useAuthStore } from '../stores/authStore';
 
 const tabs = [
   { path: '/', label: '홈', icon: '🏠' },
@@ -10,13 +11,18 @@ const tabs = [
 ];
 
 export default function Layout() {
+  const user = useAuthStore(s => s.user);
+  const regionLabel = user?.regionName ?? '동네 미인증';
+
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
       {/* Header */}
       <header className="bg-primary text-white px-4 py-3 flex items-center justify-between shadow-md">
         <h1 className="text-xl font-bold tracking-tight">동겜랭크</h1>
         <div className="flex items-center gap-2">
-          <span className="text-xs bg-white/20 rounded-full px-2 py-1">역삼동</span>
+          <span className="text-xs bg-white/20 rounded-full px-2 py-1">
+            {regionLabel}
+          </span>
           <span className="text-sm">🔔</span>
         </div>
       </header>
@@ -32,6 +38,7 @@ export default function Layout() {
           <NavLink
             key={tab.path}
             to={tab.path}
+            end={tab.path === '/'}
             className={({ isActive }) =>
               `flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg transition-colors ${
                 isActive ? 'text-primary font-bold' : 'text-gray-400'
