@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GAME_CONFIGS, GameType } from '@donggamerank/shared';
-import { api } from '../lib/api';
-import { useAuthStore } from '../stores/authStore';
+import { api, AchievementItem, Friend, FriendRequest } from '../lib/api';
 import { useAvatarStore, FRAME_RING, TITLE_STYLE } from '../stores/avatarStore';
+import { getTier } from '../lib/tier';
 
 const MOCK_PROFILE = {
   nickname: '빠른호랑이1234',
@@ -24,7 +24,19 @@ const MOCK_PROFILE = {
   ],
 };
 
-type Tab = 'stats' | 'games' | 'external';
+const MOCK_ACHIEVEMENTS: AchievementItem[] = [
+  { type: 'FIRST_BLOOD', title: '첫 게임', description: '첫 게임 완료', icon: '🎮', rewardElo: 5, isUnlocked: true },
+  { type: 'VETERAN_100', title: '백전노장', description: '총 100게임', icon: '🏅', rewardElo: 30, isUnlocked: true },
+  { type: 'SPEED_DEMON', title: '스피드 악마', description: '스피드 탭 50회', icon: '⚡', rewardElo: 20, isUnlocked: false },
+  { type: 'PVP_CHAMPION', title: 'PvP 챔피언', description: 'PvP 10승', icon: '🏆', rewardElo: 50, isUnlocked: false },
+  { type: 'PERFECT_AIM', title: '에임 신', description: '연속 조준 만점', icon: '🎯', rewardElo: 30, isUnlocked: false },
+  { type: 'MEMORY_KING', title: '기억의 왕', description: '역순 기억 5/5', icon: '🧠', rewardElo: 25, isUnlocked: false },
+  { type: 'REGION_TOP10', title: '동네 TOP10', description: '동네 랭킹 10위 이내', icon: '🌟', rewardElo: 30, isUnlocked: false },
+  { type: 'REGION_TOP1', title: '동네 최강자', description: '동네 랭킹 1위', icon: '👑', rewardElo: 100, isUnlocked: false },
+  { type: 'MISSION_STREAK_3', title: '3일 연속', description: '미션 3일 연속 완료', icon: '🔥', rewardElo: 25, isUnlocked: false },
+];
+
+type Tab = 'stats' | 'games' | 'achievements' | 'friends' | 'external';
 
 export default function ProfilePage() {
   const navigate = useNavigate();
@@ -43,23 +55,27 @@ export default function ProfilePage() {
     ? (TITLE_STYLE[activeTitle.assetKey] ?? 'bg-white/20 text-white')
     : null;
 
+  const tier = getTier(MOCK_PROFILE.elo);
+
+  const TABS: { key: Tab; label: string }[] = [
+    { key: 'stats', label: '📊 전적' },
+    { key: 'games', label: '🎮 게임' },
+    { key: 'achievements', label: '🏅 업적' },
+    { key: 'friends', label: '👥 친구' },
+    { key: 'external', label: '🔗 외부' },
+  ];
+
   return (
     <div className="p-4 space-y-4">
       {/* Profile Header */}
       <section className="bg-gradient-to-br from-primary to-primary-dark rounded-2xl p-5 text-white">
         <div className="flex items-center gap-4">
-          {/* 아바타 — 클릭 시 아바타 꾸미기 */}
-          <button
-            onClick={() => navigate('/avatar')}
-            className="relative flex-shrink-0 group"
-          >
-            <div
-              className={`w-16 h-16 bg-white/20 rounded-full flex items-center justify-center
-                text-3xl ring-offset-2 ring-offset-primary transition-all ${frameRingCls}`}
-            >
+          {/* 아바타 */}
+          <button onClick={() => navigate('/avatar')} className="relative flex-shrink-0 group">
+            <div className={`w-16 h-16 bg-white/20 rounded-full flex items-center justify-center
+              text-3xl ring-offset-2 ring-offset-primary transition-all ${frameRingCls}`}>
               🐯
             </div>
-            {/* 편집 오버레이 */}
             <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center
               opacity-0 group-active:opacity-100 transition-opacity">
               <span className="text-xs text-white font-bold">꾸미기</span>
@@ -78,12 +94,17 @@ export default function ProfilePage() {
                 ✏️ 수정
               </button>
             </div>
-            {/* 칭호 */}
-            {activeTitle && (
-              <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mt-0.5 ${titleCls}`}>
-                {activeTitle.name}
+            {/* 칭호 + 티어 */}
+            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+              {activeTitle && (
+                <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${titleCls}`}>
+                  {activeTitle.name}
+                </span>
+              )}
+              <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/20">
+                {tier.emoji} {tier.name}
               </span>
-            )}
+            </div>
             <div className="flex gap-2 mt-1 flex-wrap">
               <span className="bg-white/20 rounded-full px-2 py-0.5 text-xs">🏠 {MOCK_PROFILE.region}</span>
               <span className="bg-white/20 rounded-full px-2 py-0.5 text-xs">🏫 {MOCK_PROFILE.school}</span>
@@ -94,22 +115,16 @@ export default function ProfilePage() {
 
         {/* 재화 잔액 */}
         <div className="flex gap-2 mt-3">
-          <button
-            onClick={() => navigate('/avatar')}
-            className="flex items-center gap-1 bg-white/10 rounded-xl px-3 py-1.5 active:scale-95 transition-transform"
-          >
+          <button onClick={() => navigate('/avatar')}
+            className="flex items-center gap-1 bg-white/10 rounded-xl px-3 py-1.5 active:scale-95 transition-transform">
             <span className="text-amber-300 font-black text-sm">💎 {gems.toLocaleString()}</span>
           </button>
-          <button
-            onClick={() => navigate('/avatar')}
-            className="flex items-center gap-1 bg-white/10 rounded-xl px-3 py-1.5 active:scale-95 transition-transform"
-          >
+          <button onClick={() => navigate('/avatar')}
+            className="flex items-center gap-1 bg-white/10 rounded-xl px-3 py-1.5 active:scale-95 transition-transform">
             <span className="text-yellow-200 font-black text-sm">🪙 {coins.toLocaleString()}</span>
           </button>
-          <button
-            onClick={() => navigate('/avatar')}
-            className="ml-auto bg-white/20 rounded-xl px-3 py-1.5 text-xs font-bold active:scale-95 transition-transform"
-          >
+          <button onClick={() => navigate('/avatar')}
+            className="ml-auto bg-white/20 rounded-xl px-3 py-1.5 text-xs font-bold active:scale-95 transition-transform">
             🎨 아바타 꾸미기
           </button>
         </div>
@@ -152,16 +167,12 @@ export default function ProfilePage() {
       )}
 
       {/* Tab Switch */}
-      <div className="flex bg-gray-100 rounded-xl p-1">
-        {([
-          { key: 'stats', label: '📊 전적' },
-          { key: 'games', label: '🎮 게임별' },
-          { key: 'external', label: '🔗 외부 연동' },
-        ] as { key: Tab; label: string }[]).map((tab) => (
+      <div className="flex overflow-x-auto bg-gray-100 rounded-xl p-1 gap-0.5 scrollbar-hide">
+        {TABS.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+            className={`flex-shrink-0 flex-1 min-w-0 py-2 px-1 rounded-lg text-xs font-medium transition-colors ${
               activeTab === tab.key ? 'bg-white shadow text-primary' : 'text-gray-500'
             }`}
           >
@@ -173,169 +184,80 @@ export default function ProfilePage() {
       {/* Tab Content */}
       {activeTab === 'stats' && <StatsTab />}
       {activeTab === 'games' && <GamesTab />}
+      {activeTab === 'achievements' && <AchievementsTab />}
+      {activeTab === 'friends' && <FriendsTab />}
       {activeTab === 'external' && <ExternalTab />}
     </div>
   );
 }
 
-/* ── 닉네임 수정 컴포넌트 ── */
+/* ── 닉네임 수정 ── */
 
 function NicknameEditor({ currentNickname, onClose, onSaved }: {
-  currentNickname: string;
-  onClose: () => void;
-  onSaved: (nickname: string) => void;
+  currentNickname: string; onClose: () => void; onSaved: (nickname: string) => void;
 }) {
   const [input, setInput] = useState(currentNickname);
   const [status, setStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle');
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout>>();
-
   const NICKNAME_REGEX = /^[가-힣a-zA-Z0-9_]+$/;
 
-  // 실시간 유효성 검사 + 중복 체크 (디바운스 400ms)
   const validate = useCallback((value: string) => {
     if (timerRef.current) clearTimeout(timerRef.current);
-
-    // 즉시 체크: 길이, 문자
-    if (value.length < 2) {
-      setStatus('invalid');
-      setMessage('2자 이상 입력해주세요.');
-      return;
-    }
-    if (value.length > 12) {
-      setStatus('invalid');
-      setMessage('12자 이하로 입력해주세요.');
-      return;
-    }
-    if (!NICKNAME_REGEX.test(value)) {
-      setStatus('invalid');
-      setMessage('한글, 영문, 숫자, 밑줄(_)만 사용 가능합니다.');
-      return;
-    }
-    if (value === currentNickname) {
-      setStatus('idle');
-      setMessage('');
-      return;
-    }
-
-    // 서버 중복 체크 (디바운스)
-    setStatus('checking');
-    setMessage('확인 중...');
-
+    if (value.length < 2) { setStatus('invalid'); setMessage('2자 이상 입력해주세요.'); return; }
+    if (value.length > 12) { setStatus('invalid'); setMessage('12자 이하로 입력해주세요.'); return; }
+    if (!NICKNAME_REGEX.test(value)) { setStatus('invalid'); setMessage('한글, 영문, 숫자, 밑줄(_)만 사용 가능합니다.'); return; }
+    if (value === currentNickname) { setStatus('idle'); setMessage(''); return; }
+    setStatus('checking'); setMessage('확인 중...');
     timerRef.current = setTimeout(async () => {
       try {
         const result = await api.checkNickname(value);
-        if (result.available) {
-          setStatus('available');
-          setMessage('사용 가능한 닉네임입니다!');
-        } else {
-          setStatus('taken');
-          setMessage(result.reason || '이미 사용 중인 닉네임입니다.');
-        }
-      } catch {
-        // 서버 미연결 시 로컬 검증만
-        setStatus('available');
-        setMessage('사용 가능해 보입니다. (서버 미확인)');
-      }
+        if (result.available) { setStatus('available'); setMessage('사용 가능한 닉네임입니다!'); }
+        else { setStatus('taken'); setMessage(result.reason || '이미 사용 중인 닉네임입니다.'); }
+      } catch { setStatus('available'); setMessage('사용 가능해 보입니다. (서버 미확인)'); }
     }, 400);
   }, [currentNickname]);
 
-  useEffect(() => {
-    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
-  }, []);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = e.target.value;
-    setInput(v);
-    validate(v);
-  };
+  useEffect(() => { return () => { if (timerRef.current) clearTimeout(timerRef.current); }; }, []);
 
   const handleSave = async () => {
     if (status !== 'available' || saving) return;
     setSaving(true);
-    try {
-      await api.updateMe({ nickname: input });
-      onSaved(input);
-    } catch (err: any) {
-      setStatus('taken');
-      setMessage(err.message || '저장 실패');
-    } finally {
-      setSaving(false);
-    }
+    try { await api.updateMe({ nickname: input }); onSaved(input); }
+    catch (err: any) { setStatus('taken'); setMessage(err.message || '저장 실패'); }
+    finally { setSaving(false); }
   };
 
   const canSave = status === 'available' && !saving;
-
-  const statusColor = {
-    idle: 'text-gray-400',
-    checking: 'text-yellow-500',
-    available: 'text-green-500',
-    taken: 'text-red-500',
-    invalid: 'text-red-500',
-  }[status];
-
-  const statusIcon = {
-    idle: '',
-    checking: '⏳',
-    available: '✅',
-    taken: '❌',
-    invalid: '⚠️',
-  }[status];
+  const statusColor = { idle: 'text-gray-400', checking: 'text-yellow-500', available: 'text-green-500', taken: 'text-red-500', invalid: 'text-red-500' }[status];
+  const statusIcon = { idle: '', checking: '⏳', available: '✅', taken: '❌', invalid: '⚠️' }[status];
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center" onClick={onClose}>
-      <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-6 animate-slide-up"
-        onClick={e => e.stopPropagation()}>
-
+      <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-6 animate-slide-up" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-black">닉네임 변경</h2>
           <button onClick={onClose} className="text-gray-400 text-xl">✕</button>
         </div>
-
-        {/* 입력 필드 */}
         <div className="relative">
-          <input
-            type="text"
-            value={input}
-            onChange={handleChange}
-            maxLength={12}
-            autoFocus
-            placeholder="새 닉네임 입력"
+          <input type="text" value={input} onChange={e => { setInput(e.target.value); validate(e.target.value); }}
+            maxLength={12} autoFocus placeholder="새 닉네임 입력"
             className="w-full border-2 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none transition-colors"
-            style={{
-              borderColor: status === 'available' ? '#22C55E'
-                : status === 'taken' || status === 'invalid' ? '#EF4444'
-                : '#E5E7EB',
-            }}
-          />
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">
-            {input.length}/12
-          </span>
+            style={{ borderColor: status === 'available' ? '#22C55E' : status === 'taken' || status === 'invalid' ? '#EF4444' : '#E5E7EB' }} />
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">{input.length}/12</span>
         </div>
-
-        {/* 상태 메시지 */}
-        <p className={`text-sm mt-2 h-5 ${statusColor}`}>
-          {statusIcon} {message}
-        </p>
-
-        {/* 규칙 안내 */}
+        <p className={`text-sm mt-2 h-5 ${statusColor}`}>{statusIcon} {message}</p>
         <div className="bg-gray-50 rounded-xl p-3 mt-3 space-y-1">
           <p className="text-xs text-gray-500 font-bold">닉네임 규칙</p>
           <Rule ok={input.length >= 2 && input.length <= 12} text="2~12자" />
           <Rule ok={input.length === 0 || NICKNAME_REGEX.test(input)} text="한글, 영문, 숫자, 밑줄(_)만 가능" />
           <Rule ok={status !== 'taken'} text="중복 불가" />
         </div>
-
-        {/* 버튼 */}
         <div className="flex gap-3 mt-5">
-          <button onClick={onClose} className="flex-1 py-3 rounded-xl font-bold bg-gray-100 text-gray-500">
-            취소
-          </button>
+          <button onClick={onClose} className="flex-1 py-3 rounded-xl font-bold bg-gray-100 text-gray-500">취소</button>
           <button onClick={handleSave} disabled={!canSave}
-            className={`flex-1 py-3 rounded-xl font-bold transition-colors ${
-              canSave ? 'bg-primary text-white active:scale-95' : 'bg-gray-200 text-gray-400'
-            }`}>
+            className={`flex-1 py-3 rounded-xl font-bold transition-colors ${canSave ? 'bg-primary text-white active:scale-95' : 'bg-gray-200 text-gray-400'}`}>
             {saving ? '저장 중...' : '변경하기'}
           </button>
         </div>
@@ -361,41 +283,24 @@ function StatsTab() {
         <h3 className="font-bold text-sm mb-3">📈 최근 전적</h3>
         <div className="flex gap-1">
           {['W', 'W', 'L', 'W', 'W', 'W', 'L', 'W', 'L', 'W'].map((r, i) => (
-            <div key={i}
-              className={`flex-1 h-8 rounded flex items-center justify-center text-xs font-bold text-white ${
-                r === 'W' ? 'bg-green-500' : 'bg-red-400'
-              }`}>
+            <div key={i} className={`flex-1 h-8 rounded flex items-center justify-center text-xs font-bold text-white ${r === 'W' ? 'bg-green-500' : 'bg-red-400'}`}>
               {r}
             </div>
           ))}
         </div>
       </div>
-
       <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
         <h3 className="font-bold text-sm mb-3">🎮 총 전적</h3>
         <div className="grid grid-cols-3 gap-4 text-center">
-          <div>
-            <p className="text-2xl font-black">{MOCK_PROFILE.totalGames}</p>
-            <p className="text-xs text-gray-400">총 게임</p>
-          </div>
-          <div>
-            <p className="text-2xl font-black text-green-500">{MOCK_PROFILE.totalWins}</p>
-            <p className="text-xs text-gray-400">승리</p>
-          </div>
-          <div>
-            <p className="text-2xl font-black text-red-400">{MOCK_PROFILE.totalGames - MOCK_PROFILE.totalWins}</p>
-            <p className="text-xs text-gray-400">패배</p>
-          </div>
+          <div><p className="text-2xl font-black">{MOCK_PROFILE.totalGames}</p><p className="text-xs text-gray-400">총 게임</p></div>
+          <div><p className="text-2xl font-black text-green-500">{MOCK_PROFILE.totalWins}</p><p className="text-xs text-gray-400">승리</p></div>
+          <div><p className="text-2xl font-black text-red-400">{MOCK_PROFILE.totalGames - MOCK_PROFILE.totalWins}</p><p className="text-xs text-gray-400">패배</p></div>
         </div>
       </div>
-
       <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
         <h3 className="font-bold text-sm mb-3">🏆 시즌 기록</h3>
         <div className="flex items-center justify-between py-2">
-          <div>
-            <p className="font-medium text-sm">Season 1</p>
-            <p className="text-xs text-gray-400">골드 · 최종 #42</p>
-          </div>
+          <div><p className="font-medium text-sm">Season 1</p><p className="text-xs text-gray-400">골드 · 최종 #42</p></div>
           <span className="text-xl">🥇</span>
         </div>
       </div>
@@ -409,8 +314,7 @@ function GamesTab() {
       {MOCK_PROFILE.topGames.map((game) => {
         const config = GAME_CONFIGS[game.type];
         return (
-          <div key={game.type}
-            className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex items-center gap-3">
+          <div key={game.type} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex items-center gap-3">
             <span className="text-3xl">{config.icon}</span>
             <div className="flex-1">
               <p className="font-bold text-sm">{config.name}</p>
@@ -430,13 +334,187 @@ function GamesTab() {
   );
 }
 
+function AchievementsTab() {
+  const [achievements, setAchievements] = useState<AchievementItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.getAchievements()
+      .then(setAchievements)
+      .catch(() => setAchievements(MOCK_ACHIEVEMENTS))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return <div className="text-center py-8 text-gray-400 text-sm">로딩 중...</div>;
+  }
+
+  const unlocked = achievements.filter(a => a.isUnlocked);
+  const locked = achievements.filter(a => !a.isUnlocked);
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="font-bold text-sm mb-3">🏅 달성한 업적 ({unlocked.length})</h3>
+        {unlocked.length === 0 ? (
+          <div className="bg-gray-50 rounded-xl p-6 text-center text-gray-400 text-sm">
+            아직 달성한 업적이 없어요. 게임을 해보세요!
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-2">
+            {unlocked.map((a) => (
+              <div key={a.type} className="bg-white rounded-xl p-3 shadow-sm border border-gray-100 text-center">
+                <p className="text-3xl mb-1">{a.icon}</p>
+                <p className="text-xs font-bold text-gray-800 leading-tight">{a.title}</p>
+                <p className="text-[10px] text-accent font-bold mt-0.5">+{a.rewardElo} ELO</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      {locked.length > 0 && (
+        <div>
+          <h3 className="font-bold text-sm mb-3 text-gray-400">🔒 미달성 ({locked.length})</h3>
+          <div className="grid grid-cols-3 gap-2">
+            {locked.slice(0, 9).map((a) => (
+              <div key={a.type} className="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
+                <p className="text-3xl mb-1 opacity-25">{a.icon}</p>
+                <p className="text-xs text-gray-400 leading-tight">{a.title}</p>
+                <p className="text-[10px] text-gray-300 mt-0.5">+{a.rewardElo}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FriendsTab() {
+  const [friends, setFriends] = useState<Friend[]>([]);
+  const [requests, setRequests] = useState<FriendRequest[]>([]);
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  useEffect(() => {
+    Promise.all([api.getFriends(), api.getFriendRequests()])
+      .then(([f, r]) => { setFriends(f); setRequests(r); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleAccept = async (requesterId: string) => {
+    try {
+      await api.acceptFriendRequest(requesterId);
+      setRequests(r => r.filter(req => req.from.userId !== requesterId));
+      const updated = await api.getFriends();
+      setFriends(updated);
+    } catch { /* 무시 */ }
+  };
+
+  const handleSendRequest = async () => {
+    if (!search.trim() || sending) return;
+    setSending(true); setMsg('');
+    try {
+      await api.sendFriendRequest(search.trim());
+      setMsg('친구 요청을 보냈습니다!');
+      setSearch('');
+    } catch (e: any) {
+      setMsg(e.message || '친구 요청 실패');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleRemove = async (userId: string) => {
+    try {
+      await api.removeFriend(userId);
+      setFriends(f => f.filter(fr => fr.userId !== userId));
+    } catch { /* 무시 */ }
+  };
+
+  if (loading) return <div className="text-center py-8 text-gray-400 text-sm">로딩 중...</div>;
+
+  return (
+    <div className="space-y-4">
+      {/* 친구 추가 */}
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+        <h3 className="font-bold text-sm mb-3">👥 친구 추가</h3>
+        <div className="flex gap-2">
+          <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="유저 ID 입력" onKeyDown={e => e.key === 'Enter' && handleSendRequest()}
+            className="flex-1 border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary" />
+          <button onClick={handleSendRequest} disabled={sending || !search.trim()}
+            className={`px-4 rounded-xl font-bold text-sm transition-all active:scale-95 ${
+              sending || !search.trim() ? 'bg-gray-100 text-gray-400' : 'bg-primary text-white'
+            }`}>
+            {sending ? '요청 중...' : '요청'}
+          </button>
+        </div>
+        {msg && <p className="text-xs mt-2 text-center text-primary font-medium">{msg}</p>}
+      </div>
+
+      {/* 받은 요청 */}
+      {requests.length > 0 && (
+        <div>
+          <h3 className="font-bold text-sm mb-2">📬 받은 요청 ({requests.length})</h3>
+          <div className="space-y-2">
+            {requests.map((req) => (
+              <div key={req.from.userId}
+                className="bg-white rounded-xl p-3 shadow-sm border border-gray-100 flex items-center gap-3">
+                <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center text-lg">🐯</div>
+                <div className="flex-1">
+                  <p className="font-bold text-sm">{req.from.nickname}</p>
+                  <p className="text-xs text-gray-400">ELO {req.from.eloRating}</p>
+                </div>
+                <button onClick={() => handleAccept(req.from.userId)}
+                  className="bg-accent text-white px-3 py-1.5 rounded-lg text-xs font-bold active:scale-95 transition-transform">
+                  수락
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 친구 목록 */}
+      <div>
+        <h3 className="font-bold text-sm mb-2">🤝 친구 ({friends.length})</h3>
+        {friends.length === 0 ? (
+          <div className="bg-gray-50 rounded-xl p-6 text-center text-gray-400 text-sm">
+            친구를 추가해보세요!
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {friends.map((f) => (
+              <div key={f.userId}
+                className="bg-white rounded-xl p-3 shadow-sm border border-gray-100 flex items-center gap-3">
+                <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center text-lg">🐯</div>
+                <div className="flex-1">
+                  <p className="font-bold text-sm">{f.nickname}</p>
+                  <p className="text-xs text-gray-400">ELO {f.eloRating}</p>
+                </div>
+                <button onClick={() => handleRemove(f.userId)}
+                  className="text-gray-300 text-sm px-2 py-1 hover:text-red-400 transition-colors">
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ExternalTab() {
   return (
     <div className="space-y-3">
       <LolConnector />
       <MapleConnector />
       <FcOnlineConnector />
-
       <div className="bg-blue-50 rounded-xl p-3 text-xs text-blue-600">
         💡 연동하면 동네/학교 기준으로 게임별 랭킹을 확인할 수 있어요!
       </div>
@@ -483,7 +561,7 @@ function LolConnector() {
   const fmtRank = (r: any) => {
     if (!r) return null;
     const kr = TIER_KR[r.tier] || r.tier;
-    const div = ['MASTER','GRANDMASTER','CHALLENGER'].includes(r.tier) ? '' : ` ${r.rank}`;
+    const div = ['MASTER', 'GRANDMASTER', 'CHALLENGER'].includes(r.tier) ? '' : ` ${r.rank}`;
     return { text: `${kr}${div}`, lp: r.lp, wins: r.wins, losses: r.losses, winRate: r.winRate, tier: r.tier };
   };
 
@@ -496,7 +574,8 @@ function LolConnector() {
         <div className="mt-3 bg-gray-900 text-white rounded-xl p-4">
           <div className="flex items-center gap-3 mb-3">
             <img src={`https://ddragon.leagueoflegends.com/cdn/14.1.1/img/profileicon/${result.profileIconId}.png`}
-              className="w-12 h-12 rounded-full" alt="" onError={e => { (e.target as HTMLImageElement).className = 'w-12 h-12 rounded-full bg-gray-700'; }} />
+              className="w-12 h-12 rounded-full" alt=""
+              onError={e => { (e.target as HTMLImageElement).className = 'w-12 h-12 rounded-full bg-gray-700'; }} />
             <div>
               <p className="font-bold">{result.gameName}<span className="text-gray-400">#{result.tagLine}</span></p>
               <p className="text-xs text-gray-400">레벨 {result.summonerLevel}</p>
@@ -505,7 +584,7 @@ function LolConnector() {
           {(() => { const s = fmtRank(result.soloRank); return s ? (
             <div className="bg-white/10 rounded-lg p-3 mb-2">
               <p className="text-xs text-gray-400 mb-1">솔로 랭크</p>
-              <p className={`text-xl font-black ${TIER_COLORS[s.tier]||''}`}>{s.text} <span className="text-sm font-normal text-gray-400">{s.lp} LP</span></p>
+              <p className={`text-xl font-black ${TIER_COLORS[s.tier] || ''}`}>{s.text} <span className="text-sm font-normal text-gray-400">{s.lp} LP</span></p>
               <p className="text-xs text-gray-400 mt-1">{s.wins}승 {s.losses}패 · 승률 {s.winRate}%</p>
             </div>
           ) : <div className="bg-white/10 rounded-lg p-3 mb-2"><p className="text-gray-500 font-bold">언랭크</p></div>; })()}
@@ -554,29 +633,19 @@ function MapleConnector() {
       {result && (
         <div className="mt-3 bg-gradient-to-br from-orange-900 to-amber-900 text-white rounded-xl p-4">
           <div className="flex items-center gap-3 mb-3">
-            {result.image ? (
-              <img src={result.image} className="w-14 h-14 rounded-lg bg-white/10" alt="" />
-            ) : (
-              <div className="w-14 h-14 rounded-lg bg-white/10 flex items-center justify-center text-2xl">🍁</div>
-            )}
+            {result.image
+              ? <img src={result.image} className="w-14 h-14 rounded-lg bg-white/10" alt="" />
+              : <div className="w-14 h-14 rounded-lg bg-white/10 flex items-center justify-center text-2xl">🍁</div>
+            }
             <div>
               <p className="font-bold text-lg">{result.characterName}</p>
               <p className="text-xs text-white/60">{result.world} · {result.guild ? `길드: ${result.guild}` : '길드 없음'}</p>
             </div>
           </div>
           <div className="grid grid-cols-3 gap-2 mb-3">
-            <div className="bg-white/10 rounded-lg p-2 text-center">
-              <p className="text-lg font-black">Lv.{result.level}</p>
-              <p className="text-[10px] text-white/50">레벨</p>
-            </div>
-            <div className="bg-white/10 rounded-lg p-2 text-center">
-              <p className="text-lg font-black">{result.class}</p>
-              <p className="text-[10px] text-white/50">직업</p>
-            </div>
-            <div className="bg-white/10 rounded-lg p-2 text-center">
-              <p className="text-lg font-black">{fmtPower(result.combatPower)}</p>
-              <p className="text-[10px] text-white/50">전투력</p>
-            </div>
+            <div className="bg-white/10 rounded-lg p-2 text-center"><p className="text-lg font-black">Lv.{result.level}</p><p className="text-[10px] text-white/50">레벨</p></div>
+            <div className="bg-white/10 rounded-lg p-2 text-center"><p className="text-lg font-black">{result.class}</p><p className="text-[10px] text-white/50">직업</p></div>
+            <div className="bg-white/10 rounded-lg p-2 text-center"><p className="text-lg font-black">{fmtPower(result.combatPower)}</p><p className="text-[10px] text-white/50">전투력</p></div>
           </div>
           <ConnectButton onClick={handleConnect} loading={loading} />
         </div>
@@ -618,10 +687,7 @@ function FcOnlineConnector() {
         <div className="mt-3 bg-gradient-to-br from-green-900 to-emerald-900 text-white rounded-xl p-4">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-2xl">⚽</div>
-            <div>
-              <p className="font-bold text-lg">{result.nickname}</p>
-              <p className="text-xs text-white/60">레벨 {result.level}</p>
-            </div>
+            <div><p className="font-bold text-lg">{result.nickname}</p><p className="text-xs text-white/60">레벨 {result.level}</p></div>
           </div>
           {result.maxDivision?.length > 0 ? (
             <div className="space-y-2 mb-3">
@@ -633,9 +699,7 @@ function FcOnlineConnector() {
               ))}
             </div>
           ) : (
-            <div className="bg-white/10 rounded-lg p-3 mb-3 text-center">
-              <p className="text-white/50">등급 정보 없음</p>
-            </div>
+            <div className="bg-white/10 rounded-lg p-3 mb-3 text-center"><p className="text-white/50">등급 정보 없음</p></div>
           )}
           <ConnectButton onClick={handleConnect} loading={loading} />
         </div>
@@ -655,11 +719,9 @@ function GameConnectorCard({ icon, title, connected, successMsg, children }: {
         <span className="text-2xl">{icon}</span>
         <h3 className="font-bold text-sm">{title}</h3>
       </div>
-      {connected ? (
-        <div className="bg-green-50 rounded-xl p-3 text-sm text-green-700 font-bold text-center">
-          ✅ 연동 완료! {successMsg}
-        </div>
-      ) : children}
+      {connected
+        ? <div className="bg-green-50 rounded-xl p-3 text-sm text-green-700 font-bold text-center">✅ 연동 완료! {successMsg}</div>
+        : children}
     </div>
   );
 }

@@ -1,3 +1,95 @@
+// ───── 타입 정의 ─────
+
+export interface DailyMission {
+  id: string;
+  missionType: string;
+  title: string;
+  description: string;
+  icon: string;
+  currentValue: number;
+  targetValue: number;
+  isCompleted: boolean;
+  rewardClaimed: boolean;
+  rewardElo: number;
+}
+
+export interface AchievementItem {
+  type: string;
+  title: string;
+  description: string;
+  icon: string;
+  rewardElo: number;
+  isUnlocked: boolean;
+  unlockedAt?: string;
+}
+
+export interface Friend {
+  userId: string;
+  nickname: string;
+  profileImage: string | null;
+  eloRating: number;
+  since: string;
+}
+
+export interface FriendRequest {
+  from: {
+    userId: string;
+    nickname: string;
+    profileImage: string | null;
+    eloRating: number;
+  };
+  createdAt: string;
+}
+
+interface Season {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  isActive: boolean;
+}
+
+interface RankEntry {
+  rank: number;
+  userId: string;
+  nickname: string;
+  score: number;
+  gamesPlayed: number;
+}
+
+interface ActiveEvent {
+  id: string;
+  title: string;
+  description: string;
+  gameType: string;
+  startAt: string;
+  endAt: string;
+  rewardElo: number;
+  regionId?: string;
+}
+
+export interface NeighborhoodBattle {
+  id: string;
+  regionAId: string;
+  regionBId: string;
+  regionAName?: string;
+  regionBName?: string;
+  regionAScore: number;
+  regionBScore: number;
+  startAt: string;
+  endAt: string;
+  isActive: boolean;
+  winnerId?: string;
+}
+
+export interface BattleRankEntry {
+  rank: number;
+  userId: string;
+  nickname: string;
+  contribution: number;
+  regionId: string;
+}
+
 const API_BASE = '/api';
 
 class ApiClient {
@@ -174,59 +266,124 @@ class ApiClient {
 
   // ───── Avatar ─────
 
-  /** 상점 목록 */
   getAvatarShop(type?: string) {
     const q = type ? `?type=${type}` : '';
     return this.request<any[]>(`/avatar/shop${q}`);
   }
 
-  /** 전체 카탈로그 */
   getAvatarCatalog(type?: string) {
     const q = type ? `?type=${type}` : '';
     return this.request<any[]>(`/avatar/catalog${q}`);
   }
 
-  /** 내 아바타 설정 조회 */
   getMyAvatar() {
     return this.request<any>('/avatar/me');
   }
 
-  /** 타 유저 아바타 조회 */
   getUserAvatar(userId: string) {
     return this.request<any>(`/avatar/${userId}`);
   }
 
-  /** 내 인벤토리 */
   getInventory() {
     return this.request<any[]>('/avatar/inventory');
   }
 
-  /** 아이템 장착 */
   equipItem(itemId: string) {
     return this.request<any>(`/avatar/equip/${itemId}`, { method: 'POST' });
   }
 
-  /** 슬롯 해제 */
   unequipSlot(slot: 'frame' | 'icon' | 'title' | 'effect') {
     return this.request<any>(`/avatar/unequip/${slot}`, { method: 'DELETE' });
   }
 
-  /** 보석으로 구매 */
   buyWithGems(itemId: string) {
     return this.request<any>(`/avatar/shop/${itemId}/buy/gems`, { method: 'POST' });
   }
 
-  /** 코인으로 구매 */
   buyWithCoins(itemId: string) {
     return this.request<any>(`/avatar/shop/${itemId}/buy/coins`, { method: 'POST' });
   }
 
-  /** 보석 충전 (결제 후) */
   chargeGems(amount: number, receipt: string) {
     return this.request<{ gems: number }>('/avatar/gems/charge', {
       method: 'POST',
       body: JSON.stringify({ amount, receipt }),
     });
+  }
+
+  // ───── Missions ─────
+
+  getMissions() {
+    return this.request<DailyMission[]>('/missions/daily');
+  }
+
+  claimMission(missionId: string) {
+    return this.request<{ eloAdded: number }>(`/missions/${missionId}/claim`, { method: 'POST' });
+  }
+
+  // ───── Achievements ─────
+
+  getAchievements() {
+    return this.request<AchievementItem[]>('/achievements');
+  }
+
+  // ───── Friends ─────
+
+  getFriends() {
+    return this.request<Friend[]>('/friends');
+  }
+
+  getFriendRequests() {
+    return this.request<FriendRequest[]>('/friends/requests');
+  }
+
+  sendFriendRequest(targetId: string) {
+    return this.request<void>(`/friends/request/${targetId}`, { method: 'POST' });
+  }
+
+  acceptFriendRequest(requesterId: string) {
+    return this.request<void>(`/friends/accept/${requesterId}`, { method: 'POST' });
+  }
+
+  removeFriend(targetId: string) {
+    return this.request<void>(`/friends/${targetId}`, { method: 'DELETE' });
+  }
+
+  // ───── Seasons ─────
+
+  getCurrentSeason() {
+    return this.request<Season>('/seasons/current');
+  }
+
+  getSeasonRankings(seasonId: string, gameType?: string, limit = 50) {
+    const q = [gameType ? `gameType=${gameType}` : '', `limit=${limit}`].filter(Boolean).join('&');
+    return this.request<RankEntry[]>(`/seasons/${seasonId}/rankings?${q}`);
+  }
+
+  getMySeasonRank(seasonId: string, gameType?: string) {
+    const q = gameType ? `?gameType=${gameType}` : '';
+    return this.request<{ rank: number; total: number; score: number }>(`/seasons/${seasonId}/my-rank${q}`);
+  }
+
+  // ───── Events ─────
+
+  getActiveEvents(regionId?: string) {
+    const q = regionId ? `?regionId=${regionId}` : '';
+    return this.request<ActiveEvent[]>(`/events/active${q}`);
+  }
+
+  getEventRankings(eventId: string, limit = 50) {
+    return this.request<RankEntry[]>(`/events/${eventId}/rankings?limit=${limit}`);
+  }
+
+  // ───── Neighborhood Battle ─────
+
+  getCurrentBattle(regionId: string) {
+    return this.request<NeighborhoodBattle>(`/neighborhood-battle/current?regionId=${regionId}`);
+  }
+
+  getBattleRankings(battleId: string) {
+    return this.request<BattleRankEntry[]>(`/neighborhood-battle/${battleId}/rankings`);
   }
 }
 

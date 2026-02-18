@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { GAME_CONFIGS, GameType, GameConfig } from '@donggamerank/shared';
 import { getGameComponent } from '../games/GameEngine';
+import { api, DailyMission } from '../lib/api';
 
 type Phase = 'ready' | 'countdown' | 'playing' | 'result';
 
@@ -129,51 +130,131 @@ export default function GamePlayPage() {
       )}
 
       {/* ── Result ── */}
-      {phase === 'result' && <ResultView config={config} score={score} onRetry={start} onBack={() => navigate('/games')} />}
+      {phase === 'result' && (
+        <ResultView
+          config={config}
+          score={score}
+          gameType={gameType!}
+          onRetry={start}
+        />
+      )}
     </div>
   );
 }
 
 /* ── 결과 화면 서브컴포넌트 ── */
 
-function ResultView({ config, score, onRetry, onBack }: {
-  config: GameConfig; score: number; onRetry: () => void; onBack: () => void;
+function ResultView({ config, score, gameType, onRetry }: {
+  config: GameConfig; score: number; gameType: string; onRetry: () => void;
 }) {
-  const mockElo = Math.floor(Math.random() * 10) + 1;
-  const mockRank = Math.floor(Math.random() * 50) + 1;
+  const navigate = useNavigate();
+  const [result, setResult] = useState<any>(null);
+  const [submitting, setSubmitting] = useState(true);
+  const [completedMissions, setCompletedMissions] = useState<string[]>([]);
+
+  useEffect(() => {
+    async function submit() {
+      try {
+        const data: any = await api.submitResult({ gameType, score, mode: 'solo' });
+        setResult(data);
+        // 미션 완료 여부 확인
+        try {
+          const missions: DailyMission[] = await api.getMissions();
+          const just = missions.filter(m => m.isCompleted && !m.rewardClaimed);
+          setCompletedMissions(just.map(m => m.title));
+        } catch { /* 미션 체크 실패는 무시 */ }
+      } catch {
+        // 서버 미연결 시 fallback
+        setResult({
+          rankChange: Math.floor(Math.random() * 10) + 1,
+          newElo: 1247 + Math.floor(Math.random() * 10) + 1,
+          regionRank: Math.floor(Math.random() * 50) + 1,
+          isNewHighScore: score > 50,
+          coinReward: 5,
+        });
+      } finally {
+        setSubmitting(false);
+      }
+    }
+    submit();
+  }, []);
+
+  if (submitting) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-5xl mb-4 animate-bounce">{config.icon}</p>
+          <p className="text-white/60 text-sm">결과 저장 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const eloChange = result?.rankChange ?? 0;
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center px-8 animate-slide-up">
+    <div className="flex-1 flex flex-col items-center justify-center px-6 animate-slide-up">
+      {/* 미션 완료 배너 */}
+      {completedMissions.length > 0 && (
+        <div className="bg-green-500/20 border border-green-500/40 rounded-2xl px-5 py-2.5 mb-4 text-center w-full max-w-xs">
+          <p className="text-green-400 text-xs font-black mb-1">미션 달성!</p>
+          {completedMissions.map((m, i) => (
+            <p key={i} className="text-white/70 text-xs">{m}</p>
+          ))}
+        </div>
+      )}
+
       <div className="text-6xl mb-3">{config.icon}</div>
       <p className="text-white/60 text-sm mb-1">{config.name}</p>
       <p className="text-7xl font-black mb-1">{score}</p>
-      <p className="text-white/30 text-xs mb-6">{config.scoreMetric}</p>
+      <p className="text-white/30 text-xs mb-5">{config.scoreMetric}</p>
 
-      <div className="bg-white/10 rounded-2xl p-5 mb-8 w-full max-w-xs">
+      {/* 결과 스탯 */}
+      <div className="bg-white/10 rounded-2xl p-5 mb-5 w-full max-w-xs">
         <div className="grid grid-cols-3 gap-4 text-center">
           <div>
             <p className="text-xs text-white/40">동네 랭킹</p>
-            <p className="text-xl font-bold">#{mockRank}</p>
+            <p className="text-xl font-bold">
+              {result?.regionRank ? `#${result.regionRank}` : '-'}
+            </p>
           </div>
           <div>
             <p className="text-xs text-white/40">ELO</p>
-            <p className="text-xl font-bold text-green-400">+{mockElo}</p>
+            <p className={`text-xl font-bold ${eloChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+              {eloChange >= 0 ? '+' : ''}{eloChange}
+            </p>
           </div>
           <div>
             <p className="text-xs text-white/40">최고 기록</p>
-            <p className="text-xl font-bold text-yellow-400">{score > 50 ? 'NEW!' : '-'}</p>
+            <p className="text-xl font-bold text-yellow-400">
+              {result?.isNewHighScore ? 'NEW!' : '-'}
+            </p>
           </div>
         </div>
+        {result?.coinReward != null && (
+          <p className="text-center text-xs text-white/40 mt-3 pt-3 border-t border-white/10">
+            🪙 +{result.coinReward} 코인 획득
+          </p>
+        )}
       </div>
 
-      <div className="flex gap-3 w-full max-w-xs">
+      {/* 행동 버튼 2×2 */}
+      <div className="grid grid-cols-2 gap-2.5 w-full max-w-xs">
         <button onClick={onRetry}
-          className="flex-1 bg-accent py-3.5 rounded-xl font-bold active:scale-95 transition-transform">
-          다시하기
+          className="bg-accent py-3.5 rounded-xl font-bold active:scale-95 transition-transform text-white">
+          한 판 더
         </button>
-        <button onClick={onBack}
-          className="flex-1 bg-white/10 py-3.5 rounded-xl font-bold active:scale-95 transition-transform">
-          목록으로
+        <button onClick={() => navigate('/profile?tab=friends')}
+          className="bg-white/10 py-3.5 rounded-xl font-bold active:scale-95 transition-transform text-white text-sm">
+          친구에게 도전
+        </button>
+        <button onClick={() => navigate('/')}
+          className="bg-white/10 py-3.5 rounded-xl font-bold active:scale-95 transition-transform text-white text-sm">
+          오늘의 미션
+        </button>
+        <button onClick={() => navigate('/rankings')}
+          className="bg-white/10 py-3.5 rounded-xl font-bold active:scale-95 transition-transform text-white text-sm">
+          랭킹 보기
         </button>
       </div>
     </div>

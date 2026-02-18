@@ -17,6 +17,7 @@ import { AchievementsModule } from './achievements/achievements.module';
 import { FriendsModule } from './friends/friends.module';
 import { EventsModule } from './events/events.module';
 import { AvatarModule } from './avatar/avatar.module';
+import { NeighborhoodBattleModule } from './neighborhood-battle/neighborhood-battle.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { AvatarModule } from './avatar/avatar.module';
     FriendsModule,
     EventsModule,
     AvatarModule,
+    NeighborhoodBattleModule,
   ],
 })
 export class AppModule implements NestModule {
