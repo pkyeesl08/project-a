@@ -3,6 +3,15 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AchievementEntity, AchievementType, ACHIEVEMENT_DEFINITIONS } from './achievement.entity';
 import { UsersService } from '../users/users.service';
+import { AvatarService } from '../avatar/avatar.service';
+import { AcquireMethod } from '../avatar/avatar-item.entity';
+
+/** 업적 달성 시 자동 지급할 아바타 아이템 assetKey 목록 */
+const ACHIEVEMENT_ITEM_REWARDS: Partial<Record<AchievementType, string[]>> = {
+  [AchievementType.REGION_TOP1]:     ['frame_region_legend', 'title_goat'],
+  [AchievementType.PVP_CHAMPION]:    ['frame_pvp_champ'],
+  [AchievementType.SPEED_DEMON]:     ['title_speed_monster'],
+};
 
 @Injectable()
 export class AchievementsService {
@@ -10,6 +19,7 @@ export class AchievementsService {
     @InjectRepository(AchievementEntity)
     private achievementRepo: Repository<AchievementEntity>,
     private usersService: UsersService,
+    private avatarService: AvatarService,
   ) {}
 
   /** 유저의 전체 업적 조회 */
@@ -99,9 +109,24 @@ export class AchievementsService {
       await this.usersService.addElo(userId, totalElo);
     }
 
+    // 업적 연계 아바타 아이템 자동 지급
+    const itemGrants: Promise<any>[] = [];
+    for (const type of newTypes) {
+      const keys = ACHIEVEMENT_ITEM_REWARDS[type];
+      if (keys) {
+        for (const key of keys) {
+          itemGrants.push(
+            this.avatarService.grantItemByKey(userId, key, AcquireMethod.ACHIEVEMENT),
+          );
+        }
+      }
+    }
+    await Promise.allSettled(itemGrants);
+
     return saved.map(a => ({
       type: a.type,
       ...ACHIEVEMENT_DEFINITIONS[a.type],
+      itemsGranted: (ACHIEVEMENT_ITEM_REWARDS[a.type] ?? []),
     }));
   }
 }

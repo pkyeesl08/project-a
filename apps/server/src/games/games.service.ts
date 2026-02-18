@@ -7,7 +7,13 @@ import { RankingsService } from '../rankings/rankings.service';
 import { SeasonsService } from '../seasons/seasons.service';
 import { MissionsService } from '../missions/missions.service';
 import { AchievementsService } from '../achievements/achievements.service';
+import { AvatarService } from '../avatar/avatar.service';
 import { normalizeScore, calculateElo, calculateSoloEloAdjustment, GameType, GAME_CONFIGS } from '@donggamerank/shared';
+
+/** 게임 완료 시 지급 코인 (솔로 기본값) */
+const COIN_REWARD_SOLO = 5;
+/** PvP 승리 추가 보너스 */
+const COIN_REWARD_PVP_WIN = 10;
 
 @Injectable()
 export class GamesService {
@@ -19,6 +25,7 @@ export class GamesService {
     private seasonsService: SeasonsService,
     private missionsService: MissionsService,
     private achievementsService: AchievementsService,
+    private avatarService: AvatarService,
   ) {}
 
   async submitResult(userId: string, data: {
@@ -115,7 +122,12 @@ export class GamesService {
       else break;
     }
 
+    // 코인 지급 (게임 완료 기본 보상)
+    const coinReward = COIN_REWARD_SOLO +
+      (data.mode === 'pvp' && data.metadata?.won === true ? COIN_REWARD_PVP_WIN : 0);
+
     Promise.allSettled([
+      this.avatarService.addCoins(userId, coinReward),
       this.missionsService.handleGameResult(userId, {
         gameType: data.gameType,
         mode: data.mode,
@@ -143,6 +155,7 @@ export class GamesService {
       regionRank,
       isNewHighScore,
       seasonId,
+      coinReward,
     };
   }
 

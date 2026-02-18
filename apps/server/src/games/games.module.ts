@@ -8,6 +8,7 @@ import { RankingsModule } from '../rankings/rankings.module';
 import { SeasonsModule } from '../seasons/seasons.module';
 import { MissionsModule } from '../missions/missions.module';
 import { AchievementsModule } from '../achievements/achievements.module';
+import { AvatarModule } from '../avatar/avatar.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { AchievementsModule } from '../achievements/achievements.module';
     SeasonsModule,
     MissionsModule,
     AchievementsModule,
+    AvatarModule,
   ],
   controllers: [GamesController],
   providers: [GamesService],

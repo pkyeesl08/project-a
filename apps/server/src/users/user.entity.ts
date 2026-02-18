@@ -36,6 +36,14 @@ export class UserEntity {
   @Column({ type: 'integer', default: 1000 })
   eloRating: number;
 
+  /** 무료 재화 — 게임/미션 완료 시 획득, 코인 상점 아이템 구매에 사용 */
+  @Column({ type: 'integer', default: 0 })
+  coins: number;
+
+  /** 프리미엄 재화 — 인앱 결제로 충전, 프리미엄 상점 아이템 구매에 사용 */
+  @Column({ type: 'integer', default: 0 })
+  gems: number;
+
   @CreateDateColumn()
   createdAt: Date;
 
