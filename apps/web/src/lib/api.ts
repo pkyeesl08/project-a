@@ -171,6 +171,63 @@ class ApiClient {
   connectFcOnline(nickname: string) {
     return this.request('/external/fc/connect', { method: 'POST', body: JSON.stringify({ nickname }) });
   }
+
+  // ───── Avatar ─────
+
+  /** 상점 목록 */
+  getAvatarShop(type?: string) {
+    const q = type ? `?type=${type}` : '';
+    return this.request<any[]>(`/avatar/shop${q}`);
+  }
+
+  /** 전체 카탈로그 */
+  getAvatarCatalog(type?: string) {
+    const q = type ? `?type=${type}` : '';
+    return this.request<any[]>(`/avatar/catalog${q}`);
+  }
+
+  /** 내 아바타 설정 조회 */
+  getMyAvatar() {
+    return this.request<any>('/avatar/me');
+  }
+
+  /** 타 유저 아바타 조회 */
+  getUserAvatar(userId: string) {
+    return this.request<any>(`/avatar/${userId}`);
+  }
+
+  /** 내 인벤토리 */
+  getInventory() {
+    return this.request<any[]>('/avatar/inventory');
+  }
+
+  /** 아이템 장착 */
+  equipItem(itemId: string) {
+    return this.request<any>(`/avatar/equip/${itemId}`, { method: 'POST' });
+  }
+
+  /** 슬롯 해제 */
+  unequipSlot(slot: 'frame' | 'icon' | 'title' | 'effect') {
+    return this.request<any>(`/avatar/unequip/${slot}`, { method: 'DELETE' });
+  }
+
+  /** 보석으로 구매 */
+  buyWithGems(itemId: string) {
+    return this.request<any>(`/avatar/shop/${itemId}/buy/gems`, { method: 'POST' });
+  }
+
+  /** 코인으로 구매 */
+  buyWithCoins(itemId: string) {
+    return this.request<any>(`/avatar/shop/${itemId}/buy/coins`, { method: 'POST' });
+  }
+
+  /** 보석 충전 (결제 후) */
+  chargeGems(amount: number, receipt: string) {
+    return this.request<{ gems: number }>('/avatar/gems/charge', {
+      method: 'POST',
+      body: JSON.stringify({ amount, receipt }),
+    });
+  }
 }
 
 export const api = new ApiClient();

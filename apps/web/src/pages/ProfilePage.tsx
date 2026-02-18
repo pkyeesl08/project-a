@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { GAME_CONFIGS, GameType } from '@donggamerank/shared';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/authStore';
+import { useAvatarStore, FRAME_RING, TITLE_STYLE } from '../stores/avatarStore';
 
 const MOCK_PROFILE = {
   nickname: '빠른호랑이1234',
@@ -25,31 +27,91 @@ const MOCK_PROFILE = {
 type Tab = 'stats' | 'games' | 'external';
 
 export default function ProfilePage() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<Tab>('stats');
   const [showNicknameEdit, setShowNicknameEdit] = useState(false);
+  const { avatar, coins, gems, fetchAll } = useAvatarStore();
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  const activeFrame = avatar?.activeFrame;
+  const activeTitle = avatar?.activeTitle;
+  const frameRingCls = activeFrame
+    ? (FRAME_RING[activeFrame.assetKey] ?? 'ring-2 ring-white/40')
+    : 'ring-2 ring-white/20';
+  const titleCls = activeTitle
+    ? (TITLE_STYLE[activeTitle.assetKey] ?? 'bg-white/20 text-white')
+    : null;
 
   return (
     <div className="p-4 space-y-4">
       {/* Profile Header */}
       <section className="bg-gradient-to-br from-primary to-primary-dark rounded-2xl p-5 text-white">
         <div className="flex items-center gap-4">
-          <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center text-3xl">
-            🐯
-          </div>
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
+          {/* 아바타 — 클릭 시 아바타 꾸미기 */}
+          <button
+            onClick={() => navigate('/avatar')}
+            className="relative flex-shrink-0 group"
+          >
+            <div
+              className={`w-16 h-16 bg-white/20 rounded-full flex items-center justify-center
+                text-3xl ring-offset-2 ring-offset-primary transition-all ${frameRingCls}`}
+            >
+              🐯
+            </div>
+            {/* 편집 오버레이 */}
+            <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center
+              opacity-0 group-active:opacity-100 transition-opacity">
+              <span className="text-xs text-white font-bold">꾸미기</span>
+            </div>
+            <div className="absolute -bottom-1 -right-1 bg-white rounded-full w-5 h-5
+              flex items-center justify-center shadow-sm">
+              <span className="text-[10px]">✏️</span>
+            </div>
+          </button>
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-xl font-black">{MOCK_PROFILE.nickname}</h1>
               <button onClick={() => setShowNicknameEdit(true)}
                 className="bg-white/20 rounded-lg px-2 py-0.5 text-xs active:scale-95 transition-transform">
                 ✏️ 수정
               </button>
             </div>
-            <div className="flex gap-2 mt-1">
+            {/* 칭호 */}
+            {activeTitle && (
+              <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mt-0.5 ${titleCls}`}>
+                {activeTitle.name}
+              </span>
+            )}
+            <div className="flex gap-2 mt-1 flex-wrap">
               <span className="bg-white/20 rounded-full px-2 py-0.5 text-xs">🏠 {MOCK_PROFILE.region}</span>
               <span className="bg-white/20 rounded-full px-2 py-0.5 text-xs">🏫 {MOCK_PROFILE.school}</span>
             </div>
           </div>
           <button className="bg-white/20 p-2 rounded-lg text-lg">⚙️</button>
+        </div>
+
+        {/* 재화 잔액 */}
+        <div className="flex gap-2 mt-3">
+          <button
+            onClick={() => navigate('/avatar')}
+            className="flex items-center gap-1 bg-white/10 rounded-xl px-3 py-1.5 active:scale-95 transition-transform"
+          >
+            <span className="text-amber-300 font-black text-sm">💎 {gems.toLocaleString()}</span>
+          </button>
+          <button
+            onClick={() => navigate('/avatar')}
+            className="flex items-center gap-1 bg-white/10 rounded-xl px-3 py-1.5 active:scale-95 transition-transform"
+          >
+            <span className="text-yellow-200 font-black text-sm">🪙 {coins.toLocaleString()}</span>
+          </button>
+          <button
+            onClick={() => navigate('/avatar')}
+            className="ml-auto bg-white/20 rounded-xl px-3 py-1.5 text-xs font-bold active:scale-95 transition-transform"
+          >
+            🎨 아바타 꾸미기
+          </button>
         </div>
 
         {/* Stats Summary */}
