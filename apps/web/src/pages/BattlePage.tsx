@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { GAME_CONFIGS, GameType, GameCategory } from '@donggamerank/shared';
 
 type MatchMode = 'region' | 'school' | 'national' | 'friend';
@@ -99,6 +100,29 @@ export default function BattlePage() {
           🎮 대전 시작!
         </button>
       )}
+
+      {/* Endless 생존 챌린지 */}
+      <section className="pt-4 border-t border-gray-100">
+        <h2 className="text-lg font-bold mb-3">♾️ 생존 챌린지</h2>
+        <Link
+          to="/endless"
+          className="block bg-gradient-to-r from-gray-900 to-gray-800 rounded-xl p-4
+                     border border-gray-700 active:scale-95 transition-transform"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-bold text-white text-sm">Endless 생존 챌린지</p>
+              <p className="text-xs text-gray-400 mt-0.5">랜덤 미니게임 · 점점 빨라짐 · ❤️×3</p>
+            </div>
+            <span className="text-3xl">♾️</span>
+          </div>
+          <div className="flex gap-2 mt-3">
+            <span className="bg-white/10 text-white/70 text-xs px-2 py-1 rounded-full">점점 빨라짐</span>
+            <span className="bg-white/10 text-white/70 text-xs px-2 py-1 rounded-full">랜덤 게임</span>
+            <span className="bg-accent/30 text-accent text-xs px-2 py-1 rounded-full font-bold">도전!</span>
+          </div>
+        </Link>
+      </section>
 
       {/* Team Battle Section */}
       <section className="pt-4 border-t border-gray-100">

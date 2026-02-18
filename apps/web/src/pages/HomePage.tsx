@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { GAME_CONFIGS, GameCategory } from '@donggamerank/shared';
 import { api, DailyMission } from '../lib/api';
 import { getTier, getNextTier } from '../lib/tier';
+import DailyBattleBanner from '../components/DailyBattleBanner';
+import DailyGameCard from '../components/DailyGameCard';
 
 const CATEGORY_LABELS = {
   [GameCategory.REACTION]: { label: '⚡ 반응', color: 'bg-game-reaction' },
@@ -122,6 +124,12 @@ export default function HomePage() {
           ))}
         </div>
       </section>
+
+      {/* 오늘의 게임 */}
+      <DailyGameCard />
+
+      {/* 오늘의 동네 배틀 */}
+      <DailyBattleBanner />
 
       {/* 오늘의 미션 */}
       {missions.length > 0 && (

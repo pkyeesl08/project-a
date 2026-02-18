@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { GAME_CONFIGS, GameType, GameConfig } from '@donggamerank/shared';
 import { getGameComponent } from '../games/GameEngine';
 import { api, DailyMission } from '../lib/api';
@@ -9,6 +9,8 @@ type Phase = 'ready' | 'countdown' | 'playing' | 'result';
 export default function GamePlayPage() {
   const { gameType } = useParams<{ gameType: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const gameMode = searchParams.get('mode') ?? 'solo'; // 'solo' | 'daily'
   const config = GAME_CONFIGS[gameType as GameType];
 
   const [phase, setPhase] = useState<Phase>('ready');
@@ -135,6 +137,7 @@ export default function GamePlayPage() {
           config={config}
           score={score}
           gameType={gameType!}
+          gameMode={gameMode}
           onRetry={start}
         />
       )}
@@ -144,8 +147,8 @@ export default function GamePlayPage() {
 
 /* ── 결과 화면 서브컴포넌트 ── */
 
-function ResultView({ config, score, gameType, onRetry }: {
-  config: GameConfig; score: number; gameType: string; onRetry: () => void;
+function ResultView({ config, score, gameType, gameMode, onRetry }: {
+  config: GameConfig; score: number; gameType: string; gameMode: string; onRetry: () => void;
 }) {
   const navigate = useNavigate();
   const [result, setResult] = useState<any>(null);
@@ -157,7 +160,8 @@ function ResultView({ config, score, gameType, onRetry }: {
   useEffect(() => {
     async function submit() {
       try {
-        const data: any = await api.submitResult({ gameType, score, mode: 'solo' });
+        const metadata: Record<string, unknown> = gameMode === 'daily' ? { subMode: 'daily' } : {};
+        const data: any = await api.submitResult({ gameType, score, mode: 'solo', metadata });
         setResult(data);
         // 미션 완료 여부 확인
         try {
@@ -338,10 +342,19 @@ function ResultView({ config, score, gameType, onRetry }: {
 
       {/* 행동 버튼 2×2 */}
       <div className="grid grid-cols-2 gap-2.5 w-full max-w-xs">
-        <button onClick={onRetry}
-          className="bg-accent py-3.5 rounded-xl font-bold active:scale-95 transition-transform text-white">
-          한 판 더
-        </button>
+        {gameMode === 'daily' ? (
+          <button
+            disabled
+            className="bg-white/10 py-3.5 rounded-xl font-bold text-white/30 text-sm"
+          >
+            오늘 1회 완료 ✓
+          </button>
+        ) : (
+          <button onClick={onRetry}
+            className="bg-accent py-3.5 rounded-xl font-bold active:scale-95 transition-transform text-white">
+            한 판 더
+          </button>
+        )}
         <button
           onClick={handleShare}
           disabled={sharing}

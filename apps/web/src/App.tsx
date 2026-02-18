@@ -11,6 +11,7 @@ import RegisterPage from './pages/RegisterPage';
 import OnboardingPage from './pages/OnboardingPage';
 import ExternalRankingPage from './pages/ExternalRankingPage';
 import AvatarPage from './pages/AvatarPage';
+import EndlessModePage from './pages/EndlessModePage';
 
 export default function App() {
   return (
@@ -27,6 +28,7 @@ export default function App() {
       {/* 풀스크린 (탭바 없음) */}
       <Route path="/avatar" element={<AvatarPage />} />
       <Route path="/play/:gameType" element={<GamePlayPage />} />
+      <Route path="/endless" element={<EndlessModePage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/onboarding" element={<OnboardingPage />} />
     </Routes>

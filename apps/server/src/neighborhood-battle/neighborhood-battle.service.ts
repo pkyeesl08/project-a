@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThan } from 'typeorm';
+import { Repository } from 'typeorm';
 import { NeighborhoodBattleEntity } from './neighborhood-battle.entity';
 
 export interface BattleRankEntry {
@@ -9,6 +9,19 @@ export interface BattleRankEntry {
   nickname: string;
   contribution: number;
   regionId: string;
+}
+
+/** 오늘 자정 기준 KST Date */
+function todayMidnight(): Date {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function tomorrowMidnight(): Date {
+  const d = todayMidnight();
+  d.setDate(d.getDate() + 1);
+  return d;
 }
 
 @Injectable()
@@ -21,9 +34,11 @@ export class NeighborhoodBattleService {
     private readonly repo: Repository<NeighborhoodBattleEntity>,
   ) {}
 
-  /** 현재 활성 대항전 조회 (내 지역이 A 또는 B인 것) */
-  async getCurrentBattle(regionId: string): Promise<NeighborhoodBattleEntity> {
-    const now = new Date();
+  /** 오늘의 활성 대항전 조회 (자정 마감, 없으면 자동 생성) */
+  async getCurrentBattle(regionId: string): Promise<NeighborhoodBattleEntity & { myContribution?: number }> {
+    const today = todayMidnight();
+    const tomorrow = tomorrowMidnight();
+
     const battle = await this.repo.findOne({
       where: [
         { regionAId: regionId, isActive: true },
@@ -31,29 +46,40 @@ export class NeighborhoodBattleService {
       ],
       order: { startAt: 'DESC' },
     });
-    if (battle) return battle;
 
-    // 활성 대항전이 없으면 자동 생성 (현재 지역 vs 인접 더미 지역)
-    return this.createBattle(regionId, `${regionId}-rival`);
+    // 오늘 배틀이 이미 있으면 반환
+    if (battle && new Date(battle.startAt) >= today) {
+      return battle;
+    }
+
+    // 기존 배틀 만료 처리
+    if (battle) {
+      await this.finalizeExpired();
+    }
+
+    // 오늘 배틀 신규 생성
+    return this.createDailyBattle(regionId, `${regionId}-rival`);
   }
 
-  /** 대항전 생성 */
-  async createBattle(
+  /** 오늘 하루짜리(자정 마감) 배틀 생성 */
+  async createDailyBattle(
     regionAId: string,
     regionBId: string,
     regionAName = '우리 동네',
     regionBName = '상대 동네',
   ): Promise<NeighborhoodBattleEntity> {
-    const now = new Date();
-    const endAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7일 후
+    const startAt = todayMidnight();
+    const endAt   = tomorrowMidnight();
+
     const battle = this.repo.create({
       regionAId, regionBId, regionAName, regionBName,
-      startAt: now, endAt, isActive: true,
+      startAt, endAt, isActive: true,
+      regionAScore: 0, regionBScore: 0,
     });
     return this.repo.save(battle);
   }
 
-  /** 기여 점수 적립 (게임 결과 제출 시 호출) */
+  /** 기여 점수 적립 — 게임 결과 제출 시 자동 호출 */
   async contribute(
     battleId: string,
     userId: string,
@@ -64,28 +90,27 @@ export class NeighborhoodBattleService {
     const battle = await this.repo.findOneBy({ id: battleId });
     if (!battle || !battle.isActive) return;
 
-    // 기여 점수 누적 (In-memory — 프로덕션에서는 Redis 권장)
     if (!this.contributions.has(battleId)) {
       this.contributions.set(battleId, new Map());
     }
     const map = this.contributions.get(battleId)!;
     const prev = map.get(userId) ?? { nickname, regionId, score: 0 };
-    map.set(userId, { nickname, regionId, score: prev.score + score });
+    const newScore = prev.score + score;
+    map.set(userId, { nickname, regionId, score: newScore });
 
-    // 지역 총점 갱신
     if (regionId === battle.regionAId) {
-      await this.repo.update(battleId, { regionAScore: battle.regionAScore + score });
+      await this.repo.increment({ id: battleId }, 'regionAScore', score);
     } else if (regionId === battle.regionBId) {
-      await this.repo.update(battleId, { regionBScore: battle.regionBScore + score });
+      await this.repo.increment({ id: battleId }, 'regionBScore', score);
     }
   }
 
-  /** 대항전 기여 랭킹 (특정 지역) */
+  /** 배틀 기여 랭킹 (특정 지역 필터링 가능) */
   async getBattleRankings(battleId: string, regionId?: string): Promise<BattleRankEntry[]> {
     const map = this.contributions.get(battleId);
     if (!map) return [];
 
-    const entries = Array.from(map.entries())
+    return Array.from(map.entries())
       .filter(([, v]) => !regionId || v.regionId === regionId)
       .map(([userId, v]) => ({ userId, ...v }))
       .sort((a, b) => b.score - a.score)
@@ -97,17 +122,18 @@ export class NeighborhoodBattleService {
         contribution: e.score,
         regionId: e.regionId,
       }));
-
-    return entries;
   }
 
-  /** 종료된 대항전 정리 (스케줄러에서 주기적 호출 가능) */
+  /** 내 기여 점수 조회 */
+  getMyContribution(battleId: string, userId: string): number {
+    return this.contributions.get(battleId)?.get(userId)?.score ?? 0;
+  }
+
+  /** 만료된 배틀 정산 */
   async finalizeExpired(): Promise<void> {
     const now = new Date();
-    const expired = await this.repo.find({
-      where: { isActive: true },
-    });
-    for (const b of expired) {
+    const active = await this.repo.find({ where: { isActive: true } });
+    for (const b of active) {
       if (new Date(b.endAt) <= now) {
         const winnerId = b.regionAScore >= b.regionBScore ? b.regionAId : b.regionBId;
         await this.repo.update(b.id, { isActive: false, winnerId });

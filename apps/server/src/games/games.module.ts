@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { GameResultEntity } from './game-result.entity';
 import { GamesController } from './games.controller';
 import { GamesService } from './games.service';
+import { DailyGameService } from './daily-game.service';
 import { UsersModule } from '../users/users.module';
 import { RankingsModule } from '../rankings/rankings.module';
 import { SeasonsModule } from '../seasons/seasons.module';
@@ -21,7 +22,7 @@ import { AvatarModule } from '../avatar/avatar.module';
     AvatarModule,
   ],
   controllers: [GamesController],
-  providers: [GamesService],
-  exports: [GamesService],
+  providers: [GamesService, DailyGameService],
+  exports: [GamesService, DailyGameService],
 })
 export class GamesModule {}

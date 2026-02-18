@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Query, Body, UseGuards } from '@nestjs/common';
 import { GamesService } from './games.service';
+import { DailyGameService } from './daily-game.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUserId } from '../common/auth.types';
 import { SubmitResultDto } from '../common/dto';
@@ -7,7 +8,10 @@ import { ok } from '../common/response';
 
 @Controller('games')
 export class GamesController {
-  constructor(private gamesService: GamesService) {}
+  constructor(
+    private gamesService: GamesService,
+    private dailyGameService: DailyGameService,
+  ) {}
 
   @Post('result')
   @UseGuards(JwtAuthGuard)
@@ -28,5 +32,35 @@ export class GamesController {
   @Get('types')
   getGameTypes() {
     return ok(this.gamesService.getGameTypes());
+  }
+
+  // ── 오늘의 게임 ──
+
+  @Get('daily')
+  getDailyGame() {
+    return ok(this.dailyGameService.getTodayGame());
+  }
+
+  @Get('daily/attempted')
+  @UseGuards(JwtAuthGuard)
+  async checkDailyAttempted(@CurrentUserId() userId: string) {
+    return ok({ attempted: await this.dailyGameService.checkAttempted(userId) });
+  }
+
+  @Get('daily/leaderboard')
+  async getDailyLeaderboard(
+    @Query('regionId') regionId?: string,
+    @Query('limit') limit = '50',
+  ) {
+    return ok(await this.dailyGameService.getDailyLeaderboard(regionId, +limit));
+  }
+
+  @Get('daily/my-rank')
+  @UseGuards(JwtAuthGuard)
+  async getMyDailyRank(
+    @CurrentUserId() userId: string,
+    @Query('regionId') regionId?: string,
+  ) {
+    return ok(await this.dailyGameService.getMyDailyRank(userId, regionId));
   }
 }

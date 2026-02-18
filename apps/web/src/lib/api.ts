@@ -431,12 +431,44 @@ class ApiClient {
 
   // ───── Neighborhood Battle ─────
 
-  getCurrentBattle(regionId: string) {
-    return this.request<NeighborhoodBattle>(`/neighborhood-battle/current?regionId=${regionId}`);
+  getCurrentBattle(regionId = '') {
+    const q = regionId ? `?regionId=${regionId}` : '';
+    return this.request<NeighborhoodBattle>(`/neighborhood-battle/current${q}`);
   }
 
   getBattleRankings(battleId: string) {
     return this.request<BattleRankEntry[]>(`/neighborhood-battle/${battleId}/rankings`);
+  }
+
+  contributeToCurrentBattle(battleId: string, score: number) {
+    return this.request('/neighborhood-battle/contribute', {
+      method: 'POST',
+      body: JSON.stringify({ battleId, score }),
+    });
+  }
+
+  // ───── 오늘의 게임 ─────
+
+  getDailyGame() {
+    return this.request<{ gameType: string; config: any; date: string; endAt: string }>('/games/daily');
+  }
+
+  checkDailyAttempted() {
+    return this.request<{ attempted: boolean }>('/games/daily/attempted');
+  }
+
+  getDailyLeaderboard(regionId?: string, limit = 50) {
+    const q = [regionId ? `regionId=${regionId}` : '', `limit=${limit}`].filter(Boolean).join('&');
+    return this.request<{ rank: number; userId: string; nickname: string; score: number }[]>(
+      `/games/daily/leaderboard?${q}`,
+    );
+  }
+
+  getMyDailyRank(regionId?: string) {
+    const q = regionId ? `?regionId=${regionId}` : '';
+    return this.request<{ rank: number; total: number; score: number } | null>(
+      `/games/daily/my-rank${q}`,
+    );
   }
 }
 
