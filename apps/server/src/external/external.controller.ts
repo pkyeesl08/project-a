@@ -83,6 +83,68 @@ export class ExternalController {
     return ok(await this.externalService.syncFcOnline(userId));
   }
 
+  /* ── PUBG ── */
+
+  @Get('pubg/lookup')
+  async lookupPubg(
+    @Query('playerName') playerName: string,
+    @Query('shard') shard: 'kakao' | 'steam' = 'kakao',
+  ) {
+    return ok(await this.externalService.lookupPubg(playerName, shard));
+  }
+
+  @Post('pubg/connect')
+  @UseGuards(JwtAuthGuard)
+  async connectPubg(
+    @CurrentUserId() userId: string,
+    @Body() body: { playerName: string; shard?: 'kakao' | 'steam' },
+  ) {
+    return ok(await this.externalService.connectPubg(userId, body.playerName, body.shard ?? 'kakao'));
+  }
+
+  @Post('pubg/sync')
+  @UseGuards(JwtAuthGuard)
+  async syncPubg(@CurrentUserId() userId: string) {
+    return ok(await this.externalService.syncPubg(userId));
+  }
+
+  @Get('pubg/ranking')
+  async pubgRanking(
+    @Query('scope') scope: 'region' | 'school',
+    @Query('scopeId') scopeId: string,
+    @Query('limit') limit = '50',
+  ) {
+    return ok(await this.externalService.getPubgRanking(scope, scopeId, +limit));
+  }
+
+  /* ── Steam ── */
+
+  @Get('steam/lookup')
+  async lookupSteam(@Query('input') input: string) {
+    return ok(await this.externalService.lookupSteam(input));
+  }
+
+  @Post('steam/connect')
+  @UseGuards(JwtAuthGuard)
+  async connectSteam(@CurrentUserId() userId: string, @Body() body: { input: string }) {
+    return ok(await this.externalService.connectSteam(userId, body.input));
+  }
+
+  @Post('steam/sync')
+  @UseGuards(JwtAuthGuard)
+  async syncSteam(@CurrentUserId() userId: string) {
+    return ok(await this.externalService.syncSteam(userId));
+  }
+
+  @Get('steam/ranking')
+  async steamRanking(
+    @Query('scope') scope: 'region' | 'school',
+    @Query('scopeId') scopeId: string,
+    @Query('limit') limit = '50',
+  ) {
+    return ok(await this.externalService.getSteamRanking(scope, scopeId, +limit));
+  }
+
   /* ── 범용 ── */
 
   @Post('connect/:platform')

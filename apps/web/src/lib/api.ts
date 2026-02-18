@@ -264,6 +264,51 @@ class ApiClient {
     return this.request('/external/fc/connect', { method: 'POST', body: JSON.stringify({ nickname }) });
   }
 
+  // PUBG
+  lookupPubg(playerName: string, shard: 'kakao' | 'steam' = 'kakao') {
+    return this.request<{
+      playerId: string; playerName: string; shard: string;
+      squadFpp: { tier: string; subTier: string; rp: number; kills: number; deaths: number;
+        wins: number; roundsPlayed: number; kda: number; winRate: string } | null;
+      soloFpp: { tier: string; subTier: string; rp: number; kills: number; deaths: number;
+        wins: number; roundsPlayed: number; kda: number; winRate: string } | null;
+    }>(`/external/pubg/lookup?playerName=${encodeURIComponent(playerName)}&shard=${shard}`);
+  }
+
+  connectPubg(playerName: string, shard: 'kakao' | 'steam' = 'kakao') {
+    return this.request('/external/pubg/connect', { method: 'POST', body: JSON.stringify({ playerName, shard }) });
+  }
+
+  syncPubg() {
+    return this.request('/external/pubg/sync', { method: 'POST' });
+  }
+
+  getPubgRanking(scope: 'region' | 'school', scopeId: string, limit = 50) {
+    return this.request<any[]>(`/external/pubg/ranking?scope=${scope}&scopeId=${scopeId}&limit=${limit}`);
+  }
+
+  // Steam
+  lookupSteam(input: string) {
+    return this.request<{
+      steamId: string; personaName: string; avatarUrl: string; profileUrl: string;
+      totalHours: number; gameCount: number;
+      notableGames: { appId: number; name: string; hours: number; title: string | null }[];
+      bestTitle: string | null;
+    }>(`/external/steam/lookup?input=${encodeURIComponent(input)}`);
+  }
+
+  connectSteam(input: string) {
+    return this.request('/external/steam/connect', { method: 'POST', body: JSON.stringify({ input }) });
+  }
+
+  syncSteam() {
+    return this.request('/external/steam/sync', { method: 'POST' });
+  }
+
+  getSteamRanking(scope: 'region' | 'school', scopeId: string, limit = 50) {
+    return this.request<any[]>(`/external/steam/ranking?scope=${scope}&scopeId=${scopeId}&limit=${limit}`);
+  }
+
   // ───── Avatar ─────
 
   getAvatarShop(type?: string) {

@@ -4,6 +4,8 @@ import { Repository } from 'typeorm';
 import { ExternalAccountEntity } from './external-account.entity';
 import { RiotApiService, tierToScore, tierToKorean } from './riot-api.service';
 import { NexonApiService, fcDivisionToScore } from './nexon-api.service';
+import { PubgApiService, pubgTierToScore, pubgTierToKorean } from './pubg-api.service';
+import { SteamApiService, steamTierScore } from './steam-api.service';
 
 @Injectable()
 export class ExternalService {
@@ -12,6 +14,8 @@ export class ExternalService {
     private externalRepo: Repository<ExternalAccountEntity>,
     private riotApi: RiotApiService,
     private nexonApi: NexonApiService,
+    private pubgApi: PubgApiService,
+    private steamApi: SteamApiService,
   ) {}
 
   /* ══════════════════════════════════════
@@ -260,9 +264,196 @@ export class ExternalService {
     }));
   }
 
+  /* ══════════════════════════════════════
+   * PUBG (배틀그라운드)
+   * ══════════════════════════════════════ */
+
+  /** PUBG 플레이어 정보 미리보기 (연동 전 확인) */
+  async lookupPubg(playerName: string, shard: 'kakao' | 'steam' = 'kakao') {
+    return this.pubgApi.getPlayerInfo(playerName, shard);
+  }
+
+  /** PUBG 계정 연동 */
+  async connectPubg(userId: string, playerName: string, shard: 'kakao' | 'steam' = 'kakao') {
+    const existing = await this.externalRepo.findOne({
+      where: { userId, platform: 'pubg', game: 'pubg' },
+    });
+    if (existing) throw new BadRequestException('이미 PUBG 계정이 연동되어 있습니다.');
+
+    const info = await this.pubgApi.getPlayerInfo(playerName, shard);
+
+    // 스쿼드FPP → 솔로FPP 순으로 대표 랭크 결정
+    const repr = info.squadFpp ?? info.soloFpp;
+
+    const account = this.externalRepo.create({
+      userId,
+      platform:    'pubg',
+      game:        'pubg',
+      externalId:  info.playerId,
+      gameName:    info.playerName,
+      tier: repr
+        ? pubgTierToKorean(repr.tier, repr.subTier)
+        : '언랭크',
+      tierScore: repr
+        ? pubgTierToScore(repr.tier, repr.subTier, repr.rp)
+        : 0,
+      stats: {
+        shard,
+        squadFpp: info.squadFpp,
+        soloFpp:  info.soloFpp,
+      },
+      lastSyncedAt: new Date(),
+    });
+
+    return this.externalRepo.save(account);
+  }
+
+  /** PUBG 데이터 갱신 */
+  async syncPubg(userId: string) {
+    const account = await this.externalRepo.findOne({
+      where: { userId, platform: 'pubg', game: 'pubg' },
+    });
+    if (!account) throw new NotFoundException('연동된 PUBG 계정이 없습니다.');
+
+    const shard = (account.stats as any)?.shard ?? 'kakao';
+    const info  = await this.pubgApi.getPlayerInfo(account.gameName, shard);
+    const repr  = info.squadFpp ?? info.soloFpp;
+
+    account.tier      = repr ? pubgTierToKorean(repr.tier, repr.subTier) : '언랭크';
+    account.tierScore = repr ? pubgTierToScore(repr.tier, repr.subTier, repr.rp) : 0;
+    account.stats     = { shard, squadFpp: info.squadFpp, soloFpp: info.soloFpp };
+    account.lastSyncedAt = new Date();
+
+    return this.externalRepo.save(account);
+  }
+
+  /** 동네/학교별 PUBG 랭킹 (RP순) */
+  async getPubgRanking(scope: 'region' | 'school', scopeId: string, limit = 50) {
+    const qb = this.externalRepo
+      .createQueryBuilder('ext')
+      .innerJoinAndSelect('ext.user', 'user')
+      .where('ext.game = :game', { game: 'pubg' })
+      .andWhere('ext.tierScore > 0')
+      .orderBy('ext.tierScore', 'DESC')
+      .limit(limit);
+
+    if (scope === 'region') {
+      qb.andWhere('user.primaryRegionId = :scopeId', { scopeId });
+    } else {
+      qb.andWhere('user.schoolId = :scopeId', { scopeId });
+    }
+
+    const results = await qb.getMany();
+    return results.map((acc, i) => ({
+      rank:       i + 1,
+      userId:     acc.userId,
+      nickname:   acc.user?.nickname,
+      playerName: acc.gameName,
+      tier:       acc.tier,
+      tierScore:  acc.tierScore,
+      squadFpp:   (acc.stats as any)?.squadFpp ?? null,
+      soloFpp:    (acc.stats as any)?.soloFpp  ?? null,
+      lastSynced: acc.lastSyncedAt,
+    }));
+  }
+
+  /* ══════════════════════════════════════
+   * Steam
+   * ══════════════════════════════════════ */
+
+  /** Steam 프로필 미리보기 (연동 전 확인) */
+  async lookupSteam(input: string) {
+    return this.steamApi.getPlayerInfo(input);
+  }
+
+  /** Steam 계정 연동 */
+  async connectSteam(userId: string, input: string) {
+    const existing = await this.externalRepo.findOne({
+      where: { userId, platform: 'steam', game: 'steam' },
+    });
+    if (existing) throw new BadRequestException('이미 Steam 계정이 연동되어 있습니다.');
+
+    const info = await this.steamApi.getPlayerInfo(input);
+
+    const account = this.externalRepo.create({
+      userId,
+      platform:    'steam',
+      game:        'steam',
+      externalId:  info.steamId,
+      gameName:    info.personaName,
+      tier:        info.bestTitle ?? `${info.totalHours}시간`,
+      tierScore:   steamTierScore(info.totalHours),
+      stats: {
+        avatarUrl:    info.avatarUrl,
+        profileUrl:   info.profileUrl,
+        totalHours:   info.totalHours,
+        gameCount:    info.gameCount,
+        notableGames: info.notableGames,
+        bestTitle:    info.bestTitle,
+      },
+      lastSyncedAt: new Date(),
+    });
+
+    return this.externalRepo.save(account);
+  }
+
+  /** Steam 데이터 갱신 */
+  async syncSteam(userId: string) {
+    const account = await this.externalRepo.findOne({
+      where: { userId, platform: 'steam', game: 'steam' },
+    });
+    if (!account) throw new NotFoundException('연동된 Steam 계정이 없습니다.');
+
+    const info = await this.steamApi.getPlayerInfo(account.externalId);
+
+    account.gameName  = info.personaName;
+    account.tier      = info.bestTitle ?? `${info.totalHours}시간`;
+    account.tierScore = steamTierScore(info.totalHours);
+    account.stats     = {
+      avatarUrl: info.avatarUrl, profileUrl: info.profileUrl,
+      totalHours: info.totalHours, gameCount: info.gameCount,
+      notableGames: info.notableGames, bestTitle: info.bestTitle,
+    };
+    account.lastSyncedAt = new Date();
+
+    return this.externalRepo.save(account);
+  }
+
+  /** 동네/학교별 Steam 랭킹 (총 플레이타임순) */
+  async getSteamRanking(scope: 'region' | 'school', scopeId: string, limit = 50) {
+    const qb = this.externalRepo
+      .createQueryBuilder('ext')
+      .innerJoinAndSelect('ext.user', 'user')
+      .where('ext.game = :game', { game: 'steam' })
+      .andWhere('ext.tierScore > 0')
+      .orderBy('ext.tierScore', 'DESC')
+      .limit(limit);
+
+    if (scope === 'region') {
+      qb.andWhere('user.primaryRegionId = :scopeId', { scopeId });
+    } else {
+      qb.andWhere('user.schoolId = :scopeId', { scopeId });
+    }
+
+    const results = await qb.getMany();
+    return results.map((acc, i) => ({
+      rank:         i + 1,
+      userId:       acc.userId,
+      nickname:     acc.user?.nickname,
+      personaName:  acc.gameName,
+      tier:         acc.tier,
+      totalHours:   (acc.stats as any)?.totalHours ?? 0,
+      gameCount:    (acc.stats as any)?.gameCount  ?? 0,
+      notableGames: (acc.stats as any)?.notableGames ?? [],
+      bestTitle:    (acc.stats as any)?.bestTitle ?? null,
+      avatarUrl:    (acc.stats as any)?.avatarUrl ?? null,
+      lastSynced:   acc.lastSyncedAt,
+    }));
+  }
+
   /* ── 범용 연동 라우터 ── */
 
-  async connect(userId: string, platform: string, data: { token: string; game: string }) {
+  async connect(userId: string, platform: string, data: { token: string; game: string; shard?: string }) {
     if (platform === 'riot' && data.game === 'lol') {
       return this.connectLol(userId, data.token);
     }
@@ -277,6 +468,12 @@ export class ExternalService {
     }
     if (platform === 'battlenet' && data.game === 'ow2') {
       return this.connectOw2(userId, data.token);
+    }
+    if (platform === 'pubg' && data.game === 'pubg') {
+      return this.connectPubg(userId, data.token, (data.shard as 'kakao' | 'steam') ?? 'kakao');
+    }
+    if (platform === 'steam' && data.game === 'steam') {
+      return this.connectSteam(userId, data.token);
     }
     throw new BadRequestException('지원하지 않는 플랫폼/게임 조합입니다.');
   }
@@ -366,6 +563,8 @@ export class ExternalService {
     if (platform === 'riot' && game === 'valorant') return this.syncValorant(userId);
     if (platform === 'nexon' && game === 'maplestory') return this.syncMaple(userId);
     if (platform === 'nexon' && (game === 'fconline' || game === 'fifaonline')) return this.syncFcOnline(userId);
+    if (platform === 'pubg' && game === 'pubg') return this.syncPubg(userId);
+    if (platform === 'steam' && game === 'steam') return this.syncSteam(userId);
     throw new BadRequestException('해당 게임의 동기화는 아직 지원하지 않습니다.');
   }
 

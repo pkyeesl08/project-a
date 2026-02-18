@@ -515,6 +515,9 @@ function ExternalTab() {
       <LolConnector />
       <MapleConnector />
       <FcOnlineConnector />
+      <PubgConnector />
+      <SteamConnector />
+
       <div className="bg-blue-50 rounded-xl p-3 text-xs text-blue-600">
         💡 연동하면 동네/학교 기준으로 게임별 랭킹을 확인할 수 있어요!
       </div>
@@ -750,5 +753,196 @@ function ConnectButton({ onClick, loading }: { onClick: () => void; loading: boo
       className="w-full mt-2 bg-accent py-3 rounded-xl font-bold active:scale-95 transition-transform text-white">
       {loading ? '연동 중...' : '이 계정으로 연동하기'}
     </button>
+  );
+}
+
+/* ── PUBG 연동 ── */
+
+function PubgConnector() {
+  const [input, setInput]       = useState('');
+  const [shard, setShard]       = useState<'kakao' | 'steam'>('kakao');
+  const [result, setResult]     = useState<any>(null);
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState('');
+  const [connected, setConnected] = useState(false);
+
+  const PUBG_TIER_COLORS: Record<string, string> = {
+    Bronze: 'text-amber-700', Silver: 'text-gray-400', Gold: 'text-yellow-500',
+    Platinum: 'text-cyan-400', Diamond: 'text-blue-400', Master: 'text-purple-400',
+  };
+
+  const handleSearch = async () => {
+    if (!input.trim()) return;
+    setLoading(true); setError(''); setResult(null);
+    try { setResult(await api.lookupPubg(input.trim(), shard)); }
+    catch (e: any) { setError(e.message || '플레이어를 찾을 수 없습니다.'); }
+    finally { setLoading(false); }
+  };
+
+  const handleConnect = async () => {
+    setLoading(true);
+    try { await api.connectPubg(input.trim(), shard); setConnected(true); }
+    catch (e: any) { setError(e.message || '연동 실패'); }
+    finally { setLoading(false); }
+  };
+
+  const fmtMode = (mode: any) => {
+    if (!mode) return null;
+    return `${mode.tier} ${mode.subTier} · ${mode.rp} RP · KDA ${mode.kda} · 승률 ${mode.winRate}%`;
+  };
+
+  return (
+    <GameConnectorCard icon="🪖" title="PUBG (배틀그라운드)" connected={connected} successMsg="동네 PUBG 랭킹에 등록되었습니다.">
+      {/* 서버 선택 */}
+      <div className="flex gap-2 mb-2">
+        {(['kakao', 'steam'] as const).map(s => (
+          <button
+            key={s}
+            onClick={() => { setShard(s); setResult(null); setError(''); }}
+            className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+              shard === s ? 'bg-yellow-500 text-white border-yellow-500' : 'bg-gray-50 text-gray-500 border-gray-200'
+            }`}
+          >
+            {s === 'kakao' ? '🇰🇷 카카오 배그' : '🌐 스팀 글로벌'}
+          </button>
+        ))}
+      </div>
+      <SearchInput
+        value={input}
+        onChange={v => { setInput(v); setError(''); setResult(null); }}
+        placeholder="인게임 닉네임 입력"
+        onSearch={handleSearch}
+        loading={loading}
+      />
+      {error && <p className="text-red-500 text-xs mt-2">❌ {error}</p>}
+      {result && (
+        <div className="mt-3 bg-gradient-to-br from-yellow-900 to-orange-900 text-white rounded-xl p-4">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-2xl">🪖</div>
+            <div>
+              <p className="font-bold text-lg">{result.playerName}</p>
+              <p className="text-xs text-white/60">{shard === 'kakao' ? '카카오 배그' : '스팀 글로벌'}</p>
+            </div>
+          </div>
+          <div className="space-y-2 mb-3">
+            {result.squadFpp ? (
+              <div className="bg-white/10 rounded-lg p-3">
+                <p className="text-xs text-white/50 mb-1">스쿼드 FPP</p>
+                <p className={`text-xl font-black ${PUBG_TIER_COLORS[result.squadFpp.tier] || 'text-white'}`}>
+                  {result.squadFpp.tier} {result.squadFpp.subTier}
+                </p>
+                <p className="text-xs text-white/60 mt-1">{fmtMode(result.squadFpp)?.split('·').slice(1).join('·')}</p>
+              </div>
+            ) : (
+              <div className="bg-white/10 rounded-lg p-3 text-center">
+                <p className="text-white/50 font-bold">스쿼드FPP 언랭크</p>
+              </div>
+            )}
+            {result.soloFpp && (
+              <div className="bg-white/10 rounded-lg p-3">
+                <p className="text-xs text-white/50 mb-1">솔로 FPP</p>
+                <p className={`text-lg font-black ${PUBG_TIER_COLORS[result.soloFpp.tier] || 'text-white'}`}>
+                  {result.soloFpp.tier} {result.soloFpp.subTier}
+                </p>
+                <p className="text-xs text-white/60">{result.soloFpp.rp} RP · KDA {result.soloFpp.kda}</p>
+              </div>
+            )}
+          </div>
+          <ConnectButton onClick={handleConnect} loading={loading} />
+        </div>
+      )}
+    </GameConnectorCard>
+  );
+}
+
+/* ── Steam 연동 ── */
+
+function SteamConnector() {
+  const [input, setInput]         = useState('');
+  const [result, setResult]       = useState<any>(null);
+  const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState('');
+  const [connected, setConnected] = useState(false);
+
+  const handleSearch = async () => {
+    if (!input.trim()) return;
+    setLoading(true); setError(''); setResult(null);
+    try { setResult(await api.lookupSteam(input.trim())); }
+    catch (e: any) { setError(e.message || '스팀 프로필을 찾을 수 없습니다.'); }
+    finally { setLoading(false); }
+  };
+
+  const handleConnect = async () => {
+    setLoading(true);
+    try { await api.connectSteam(input.trim()); setConnected(true); }
+    catch (e: any) { setError(e.message || '연동 실패'); }
+    finally { setLoading(false); }
+  };
+
+  const fmtHours = (h: number) => h >= 1000 ? `${(h / 1000).toFixed(1)}k시간` : `${h}시간`;
+
+  return (
+    <GameConnectorCard icon="🎯" title="Steam" connected={connected} successMsg="동네 Steam 랭킹에 등록되었습니다.">
+      <p className="text-xs text-gray-400 mb-2">
+        SteamID64 (17자리 숫자) 또는 커스텀 URL (예: myusername)
+      </p>
+      <SearchInput
+        value={input}
+        onChange={v => { setInput(v); setError(''); setResult(null); }}
+        placeholder="76561198012345678 또는 커스텀 URL"
+        onSearch={handleSearch}
+        loading={loading}
+      />
+      {error && <p className="text-red-500 text-xs mt-2">❌ {error}</p>}
+      {result && (
+        <div className="mt-3 bg-gradient-to-br from-slate-800 to-gray-900 text-white rounded-xl p-4">
+          <div className="flex items-center gap-3 mb-3">
+            {result.avatarUrl ? (
+              <img src={result.avatarUrl} className="w-12 h-12 rounded-full" alt="" />
+            ) : (
+              <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-2xl">🎯</div>
+            )}
+            <div>
+              <p className="font-bold text-lg">{result.personaName}</p>
+              <p className="text-xs text-white/60">
+                게임 {result.gameCount}개 · 총 {fmtHours(result.totalHours)}
+              </p>
+            </div>
+          </div>
+
+          {/* 칭호 */}
+          {result.bestTitle && (
+            <div className="bg-purple-500/20 border border-purple-500/30 rounded-lg px-3 py-2 mb-3">
+              <p className="text-[10px] text-purple-300">획득 칭호</p>
+              <p className="font-black text-purple-200">{result.bestTitle}</p>
+            </div>
+          )}
+
+          {/* 주요 게임 목록 */}
+          {result.notableGames?.length > 0 && (
+            <div className="space-y-1.5 mb-3">
+              <p className="text-xs text-white/50">주요 게임</p>
+              {result.notableGames.slice(0, 3).map((g: any) => (
+                <div key={g.appId} className="bg-white/10 rounded-lg px-3 py-2 flex items-center justify-between">
+                  <span className="text-sm font-semibold">{g.name}</span>
+                  <div className="text-right">
+                    <span className="text-sm font-black text-cyan-300">{fmtHours(g.hours)}</span>
+                    {g.title && <p className="text-[9px] text-purple-300">{g.title}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {result.notableGames?.length === 0 && (
+            <div className="bg-white/10 rounded-lg p-3 mb-3 text-center">
+              <p className="text-white/50 text-sm">주요 게임 없음 (라이브러리 비공개일 수 있음)</p>
+            </div>
+          )}
+
+          <ConnectButton onClick={handleConnect} loading={loading} />
+        </div>
+      )}
+    </GameConnectorCard>
   );
 }
