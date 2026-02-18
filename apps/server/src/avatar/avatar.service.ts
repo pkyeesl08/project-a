@@ -176,29 +176,24 @@ export class AvatarService {
    * 아바타 장착/조회
    * ═══════════════════════════════════════════ */
 
-  /** 현재 아바타 설정 조회 */
+  /** 현재 아바타 설정 조회 (eager relations 로드) */
   async getAvatar(userId: string) {
-    let avatar = await this.avatarRepo.findOne({
-      where: { userId },
-      relations: ['activeFrame', 'activeIcon', 'activeTitle', 'activeEffect'],
-    });
+    let avatar = await this.avatarRepo.findOne({ where: { userId } });
     if (!avatar) {
-      // 첫 조회 시 기본 레코드 생성
       avatar = this.avatarRepo.create({
         userId,
-        activeFrameId: null,
-        activeIconId: null,
-        activeTitleId: null,
-        activeEffectId: null,
+        activeHatId: null, activeGlassesId: null, activeTopId: null,
+        activeBottomId: null, activeShoesId: null, activeAccessoryId: null,
+        activeHairId: null, activeEyesId: null, activeNoseId: null, activeLipsId: null,
+        activeTitleId: null, activeEffectId: null,
       });
       await this.avatarRepo.save(avatar);
     }
     return avatar;
   }
 
-  /** 아바타 아이템 장착 */
+  /** 아이템 장착 — 타입별 슬롯 자동 매핑 */
   async equipItem(userId: string, itemId: string) {
-    // 보유 확인
     const owned = await this.inventoryRepo.findOne({
       where: { userId, itemId },
       relations: ['item'],
@@ -206,31 +201,40 @@ export class AvatarService {
     if (!owned) throw new BadRequestException('보유하지 않은 아이템입니다.');
 
     let avatar = await this.avatarRepo.findOne({ where: { userId } });
-    if (!avatar) {
-      avatar = this.avatarRepo.create({ userId });
-    }
+    if (!avatar) avatar = this.avatarRepo.create({ userId });
 
-    // 타입에 따라 적절한 슬롯에 장착
-    switch (owned.item.type) {
-      case ItemType.FRAME:  avatar.activeFrameId  = itemId; break;
-      case ItemType.ICON:   avatar.activeIconId   = itemId; break;
-      case ItemType.TITLE:  avatar.activeTitleId  = itemId; break;
-      case ItemType.EFFECT: avatar.activeEffectId = itemId; break;
-    }
-
+    const slotMap: Record<ItemType, keyof UserAvatarEntity> = {
+      [ItemType.HAT]:       'activeHatId',
+      [ItemType.GLASSES]:   'activeGlassesId',
+      [ItemType.TOP]:       'activeTopId',
+      [ItemType.BOTTOM]:    'activeBottomId',
+      [ItemType.SHOES]:     'activeShoesId',
+      [ItemType.ACCESSORY]: 'activeAccessoryId',
+      [ItemType.HAIR]:      'activeHairId',
+      [ItemType.EYES]:      'activeEyesId',
+      [ItemType.NOSE]:      'activeNoseId',
+      [ItemType.LIPS]:      'activeLipsId',
+      [ItemType.TITLE]:     'activeTitleId',
+      [ItemType.EFFECT]:    'activeEffectId',
+    };
+    (avatar as any)[slotMap[owned.item.type]] = itemId;
     return this.avatarRepo.save(avatar);
   }
 
-  /** 아바타 아이템 해제 (슬롯 비우기) */
-  async unequipSlot(userId: string, slot: 'frame' | 'icon' | 'title' | 'effect') {
+  /** 슬롯 해제 */
+  async unequipSlot(userId: string, slot: string) {
+    const validSlots: Record<string, string> = {
+      hat: 'activeHatId', glasses: 'activeGlassesId', top: 'activeTopId',
+      bottom: 'activeBottomId', shoes: 'activeShoesId', accessory: 'activeAccessoryId',
+      hair: 'activeHairId', eyes: 'activeEyesId', nose: 'activeNoseId', lips: 'activeLipsId',
+      title: 'activeTitleId', effect: 'activeEffectId',
+    };
+    if (!validSlots[slot]) throw new BadRequestException('유효하지 않은 슬롯입니다.');
+
     let avatar = await this.avatarRepo.findOne({ where: { userId } });
     if (!avatar) return { unequipped: true };
 
-    const slotMap: Record<string, keyof UserAvatarEntity> = {
-      frame: 'activeFrameId', icon: 'activeIconId',
-      title: 'activeTitleId', effect: 'activeEffectId',
-    };
-    (avatar as any)[slotMap[slot]] = null;
+    (avatar as any)[validSlots[slot]] = null;
     return this.avatarRepo.save(avatar);
   }
 
@@ -264,54 +268,295 @@ export class AvatarService {
     if (count > 0) return;
 
     const defaults: Partial<AvatarItemEntity>[] = [
-      // ── 무료 기본 프레임 ──
+      // ══════════════════════════════════════════
+      // 모자 (HAT)
+      // ══════════════════════════════════════════
       {
-        name: '기본 프레임', type: ItemType.FRAME, rarity: ItemRarity.COMMON,
-        assetKey: 'frame_default', gemPrice: null, coinPrice: null,
-        description: '기본으로 지급되는 프레임', acquireCondition: '기본 지급',
+        name: '기본 캡모자', type: ItemType.HAT, rarity: ItemRarity.COMMON,
+        assetKey: 'hat_cap_basic', gemPrice: null, coinPrice: null,
+        description: '가장 기본적인 캡모자', acquireCondition: '기본 지급',
         isLimited: false, sortOrder: 0,
       },
-      // ── 코인 구매 프레임 ──
       {
-        name: '실버 프레임', type: ItemType.FRAME, rarity: ItemRarity.RARE,
-        assetKey: 'frame_silver', gemPrice: null, coinPrice: 500,
-        description: '은빛으로 빛나는 프레임', acquireCondition: '코인 500개로 구매',
+        name: '파란 캡모자', type: ItemType.HAT, rarity: ItemRarity.RARE,
+        assetKey: 'hat_cap_blue', gemPrice: null, coinPrice: 500,
+        description: '시원한 파란색 캡모자', acquireCondition: '코인 500개로 구매',
         isLimited: false, sortOrder: 10,
       },
       {
-        name: '골드 프레임', type: ItemType.FRAME, rarity: ItemRarity.EPIC,
-        assetKey: 'frame_gold', gemPrice: null, coinPrice: 1500,
-        description: '황금빛으로 빛나는 프레임', acquireCondition: '코인 1,500개로 구매',
+        name: '스냅백', type: ItemType.HAT, rarity: ItemRarity.RARE,
+        assetKey: 'hat_snapback', gemPrice: 120, coinPrice: null,
+        description: '힙한 스냅백 모자', acquireCondition: '보석 120개로 구매',
         isLimited: false, sortOrder: 11,
       },
-      // ── 보석 구매 프레임 ──
       {
-        name: '크라운 프레임', type: ItemType.FRAME, rarity: ItemRarity.LEGENDARY,
-        assetKey: 'frame_crown', gemPrice: 500, coinPrice: null,
-        description: '왕관을 형상화한 전설 프레임', acquireCondition: '보석 500개로 구매',
+        name: '황금 왕관', type: ItemType.HAT, rarity: ItemRarity.LEGENDARY,
+        assetKey: 'hat_crown_gold', gemPrice: 600, coinPrice: null,
+        description: '진짜 승자만 쓸 수 있는 황금 왕관', acquireCondition: '보석 600개로 구매',
         isLimited: false, sortOrder: 20,
       },
       {
-        name: '불꽃 프레임', type: ItemType.FRAME, rarity: ItemRarity.EPIC,
-        assetKey: 'frame_fire', gemPrice: 200, coinPrice: null,
-        description: '활활 타오르는 불꽃 프레임', acquireCondition: '보석 200개로 구매',
-        isLimited: false, sortOrder: 21,
+        name: '시즌 1 우승 왕관', type: ItemType.HAT, rarity: ItemRarity.LEGENDARY,
+        assetKey: 'hat_s1_crown', gemPrice: null, coinPrice: null,
+        description: '시즌 1 전국 랭킹 1위에게만 지급', acquireCondition: '시즌 1 전국 1위',
+        isLimited: true, sortOrder: 100,
       },
-      // ── 업적 전용 프레임 ──
+
+      // ══════════════════════════════════════════
+      // 선글라스/안경 (GLASSES)
+      // ══════════════════════════════════════════
       {
-        name: '동네 전설 프레임', type: ItemType.FRAME, rarity: ItemRarity.LEGENDARY,
-        assetKey: 'frame_region_legend', gemPrice: null, coinPrice: null,
+        name: '동그란 선글라스', type: ItemType.GLASSES, rarity: ItemRarity.RARE,
+        assetKey: 'glasses_round', gemPrice: null, coinPrice: 300,
+        description: '레트로 감성의 동그란 선글라스', acquireCondition: '코인 300개로 구매',
+        isLimited: false, sortOrder: 10,
+      },
+      {
+        name: '에비에이터', type: ItemType.GLASSES, rarity: ItemRarity.EPIC,
+        assetKey: 'glasses_aviator', gemPrice: 100, coinPrice: null,
+        description: '조종사 스타일의 에비에이터 선글라스', acquireCondition: '보석 100개로 구매',
+        isLimited: false, sortOrder: 11,
+      },
+      {
+        name: '무지개 선글라스', type: ItemType.GLASSES, rarity: ItemRarity.EPIC,
+        assetKey: 'glasses_rainbow', gemPrice: 250, coinPrice: null,
+        description: '일곱 빛깔 무지개 선글라스', acquireCondition: '보석 250개로 구매',
+        isLimited: false, sortOrder: 20,
+      },
+      {
+        name: 'PvP 고글', type: ItemType.GLASSES, rarity: ItemRarity.EPIC,
+        assetKey: 'glasses_pvp_goggle', gemPrice: null, coinPrice: null,
+        description: 'PvP 챔피언 업적 달성자에게 지급', acquireCondition: "업적 'PvP 챔피언' 달성",
+        isLimited: false, sortOrder: 30,
+      },
+
+      // ══════════════════════════════════════════
+      // 상의 (TOP)
+      // ══════════════════════════════════════════
+      {
+        name: '흰 티셔츠', type: ItemType.TOP, rarity: ItemRarity.COMMON,
+        assetKey: 'top_tee_white', gemPrice: null, coinPrice: null,
+        description: '깔끔한 기본 흰 티셔츠', acquireCondition: '기본 지급',
+        isLimited: false, sortOrder: 0,
+      },
+      {
+        name: '회색 후드티', type: ItemType.TOP, rarity: ItemRarity.RARE,
+        assetKey: 'top_hoodie_gray', gemPrice: null, coinPrice: 400,
+        description: '편안한 회색 후드티', acquireCondition: '코인 400개로 구매',
+        isLimited: false, sortOrder: 10,
+      },
+      {
+        name: '파란 재킷', type: ItemType.TOP, rarity: ItemRarity.EPIC,
+        assetKey: 'top_jacket_blue', gemPrice: 180, coinPrice: null,
+        description: '세련된 파란 재킷', acquireCondition: '보석 180개로 구매',
+        isLimited: false, sortOrder: 11,
+      },
+      {
+        name: '전설의 로브', type: ItemType.TOP, rarity: ItemRarity.LEGENDARY,
+        assetKey: 'top_legendary_robe', gemPrice: 700, coinPrice: null,
+        description: '전설의 게이머만이 입을 수 있는 로브', acquireCondition: '보석 700개로 구매',
+        isLimited: false, sortOrder: 20,
+      },
+      {
+        name: '동네 전설 유니폼', type: ItemType.TOP, rarity: ItemRarity.LEGENDARY,
+        assetKey: 'top_region_legend', gemPrice: null, coinPrice: null,
         description: '동네 랭킹 1위 달성자에게만 지급', acquireCondition: "업적 '동네 전설' 달성",
         isLimited: false, sortOrder: 30,
       },
+
+      // ══════════════════════════════════════════
+      // 하의 (BOTTOM)
+      // ══════════════════════════════════════════
       {
-        name: 'PvP 챔피언 프레임', type: ItemType.FRAME, rarity: ItemRarity.EPIC,
-        assetKey: 'frame_pvp_champ', gemPrice: null, coinPrice: null,
-        description: 'PvP 10승 달성자에게 지급', acquireCondition: "업적 'PvP 챔피언' 달성",
-        isLimited: false, sortOrder: 31,
+        name: '청바지', type: ItemType.BOTTOM, rarity: ItemRarity.COMMON,
+        assetKey: 'bottom_jeans', gemPrice: null, coinPrice: null,
+        description: '어디에나 잘 어울리는 청바지', acquireCondition: '기본 지급',
+        isLimited: false, sortOrder: 0,
+      },
+      {
+        name: '카고 팬츠', type: ItemType.BOTTOM, rarity: ItemRarity.RARE,
+        assetKey: 'bottom_cargo', gemPrice: null, coinPrice: 400,
+        description: '주머니 많은 실용적인 카고 팬츠', acquireCondition: '코인 400개로 구매',
+        isLimited: false, sortOrder: 10,
+      },
+      {
+        name: '트레이닝 팬츠', type: ItemType.BOTTOM, rarity: ItemRarity.EPIC,
+        assetKey: 'bottom_training', gemPrice: 150, coinPrice: null,
+        description: '퍼포먼스를 높여주는 트레이닝 팬츠', acquireCondition: '보석 150개로 구매',
+        isLimited: false, sortOrder: 11,
+      },
+      {
+        name: '전설의 슬랙스', type: ItemType.BOTTOM, rarity: ItemRarity.LEGENDARY,
+        assetKey: 'bottom_legendary', gemPrice: 500, coinPrice: null,
+        description: '전설 게이머의 품격 있는 슬랙스', acquireCondition: '보석 500개로 구매',
+        isLimited: false, sortOrder: 20,
       },
 
-      // ── 칭호 ──
+      // ══════════════════════════════════════════
+      // 신발 (SHOES)
+      // ══════════════════════════════════════════
+      {
+        name: '기본 스니커즈', type: ItemType.SHOES, rarity: ItemRarity.COMMON,
+        assetKey: 'shoes_sneakers_basic', gemPrice: null, coinPrice: null,
+        description: '가장 기본적인 흰 스니커즈', acquireCondition: '기본 지급',
+        isLimited: false, sortOrder: 0,
+      },
+      {
+        name: '컬러 스니커즈', type: ItemType.SHOES, rarity: ItemRarity.RARE,
+        assetKey: 'shoes_sneakers_color', gemPrice: null, coinPrice: 300,
+        description: '다양한 색상의 컬러 스니커즈', acquireCondition: '코인 300개로 구매',
+        isLimited: false, sortOrder: 10,
+      },
+      {
+        name: '첼시 부츠', type: ItemType.SHOES, rarity: ItemRarity.EPIC,
+        assetKey: 'shoes_boots_chelsea', gemPrice: 120, coinPrice: null,
+        description: '세련된 첼시 부츠', acquireCondition: '보석 120개로 구매',
+        isLimited: false, sortOrder: 11,
+      },
+      {
+        name: '전설의 운동화', type: ItemType.SHOES, rarity: ItemRarity.LEGENDARY,
+        assetKey: 'shoes_legendary', gemPrice: 400, coinPrice: null,
+        description: '전설 게이머만 신을 수 있는 운동화', acquireCondition: '보석 400개로 구매',
+        isLimited: false, sortOrder: 20,
+      },
+
+      // ══════════════════════════════════════════
+      // 악세서리 (ACCESSORY)
+      // ══════════════════════════════════════════
+      {
+        name: '실버 목걸이', type: ItemType.ACCESSORY, rarity: ItemRarity.RARE,
+        assetKey: 'acc_necklace_silver', gemPrice: null, coinPrice: 200,
+        description: '심플한 실버 목걸이', acquireCondition: '코인 200개로 구매',
+        isLimited: false, sortOrder: 10,
+      },
+      {
+        name: '골드 시계', type: ItemType.ACCESSORY, rarity: ItemRarity.EPIC,
+        assetKey: 'acc_watch_gold', gemPrice: 100, coinPrice: null,
+        description: '고급스러운 골드 손목시계', acquireCondition: '보석 100개로 구매',
+        isLimited: false, sortOrder: 11,
+      },
+      {
+        name: 'PvP 챔피언 배지', type: ItemType.ACCESSORY, rarity: ItemRarity.EPIC,
+        assetKey: 'acc_pvp_badge', gemPrice: null, coinPrice: null,
+        description: 'PvP 10승 달성 증명 배지', acquireCondition: "업적 'PvP 챔피언' 달성",
+        isLimited: false, sortOrder: 30,
+      },
+      {
+        name: '레전드 크리스탈', type: ItemType.ACCESSORY, rarity: ItemRarity.LEGENDARY,
+        assetKey: 'acc_legend_crystal', gemPrice: 450, coinPrice: null,
+        description: '전설 등급의 마법 크리스탈 악세서리', acquireCondition: '보석 450개로 구매',
+        isLimited: false, sortOrder: 20,
+      },
+
+      // ══════════════════════════════════════════
+      // 헤어 (HAIR)
+      // ══════════════════════════════════════════
+      {
+        name: '자연스러운 검정 머리', type: ItemType.HAIR, rarity: ItemRarity.COMMON,
+        assetKey: 'hair_black_natural', gemPrice: null, coinPrice: null,
+        description: '자연스러운 기본 검정 단발', acquireCondition: '기본 지급',
+        isLimited: false, sortOrder: 0,
+      },
+      {
+        name: '갈색 웨이브 헤어', type: ItemType.HAIR, rarity: ItemRarity.RARE,
+        assetKey: 'hair_brown_wavy', gemPrice: null, coinPrice: 300,
+        description: '부드러운 갈색 웨이브 스타일', acquireCondition: '코인 300개로 구매',
+        isLimited: false, sortOrder: 10,
+      },
+      {
+        name: '금발 스파이크 헤어', type: ItemType.HAIR, rarity: ItemRarity.EPIC,
+        assetKey: 'hair_blonde_spike', gemPrice: 200, coinPrice: null,
+        description: '강렬한 금발 스파이크 스타일', acquireCondition: '보석 200개로 구매',
+        isLimited: false, sortOrder: 11,
+      },
+      {
+        name: '레인보우 헤어', type: ItemType.HAIR, rarity: ItemRarity.LEGENDARY,
+        assetKey: 'hair_rainbow', gemPrice: 600, coinPrice: null,
+        description: '일곱 빛깔 무지개 헤어', acquireCondition: '보석 600개로 구매',
+        isLimited: false, sortOrder: 20,
+      },
+
+      // ══════════════════════════════════════════
+      // 눈 (EYES)
+      // ══════════════════════════════════════════
+      {
+        name: '기본 눈', type: ItemType.EYES, rarity: ItemRarity.COMMON,
+        assetKey: 'eyes_default', gemPrice: null, coinPrice: null,
+        description: '기본 눈 스타일', acquireCondition: '기본 지급',
+        isLimited: false, sortOrder: 0,
+      },
+      {
+        name: '반짝이는 눈', type: ItemType.EYES, rarity: ItemRarity.RARE,
+        assetKey: 'eyes_sparkle', gemPrice: null, coinPrice: 200,
+        description: '별처럼 반짝이는 눈', acquireCondition: '코인 200개로 구매',
+        isLimited: false, sortOrder: 10,
+      },
+      {
+        name: '결의의 눈', type: ItemType.EYES, rarity: ItemRarity.EPIC,
+        assetKey: 'eyes_determined', gemPrice: 100, coinPrice: null,
+        description: '강한 의지가 담긴 눈빛', acquireCondition: '보석 100개로 구매',
+        isLimited: false, sortOrder: 11,
+      },
+      {
+        name: '전설의 빛나는 눈', type: ItemType.EYES, rarity: ItemRarity.LEGENDARY,
+        assetKey: 'eyes_legendary_glow', gemPrice: 450, coinPrice: null,
+        description: '황금빛으로 빛나는 전설의 눈', acquireCondition: '보석 450개로 구매',
+        isLimited: false, sortOrder: 20,
+      },
+
+      // ══════════════════════════════════════════
+      // 코 (NOSE)
+      // ══════════════════════════════════════════
+      {
+        name: '기본 코', type: ItemType.NOSE, rarity: ItemRarity.COMMON,
+        assetKey: 'nose_default', gemPrice: null, coinPrice: null,
+        description: '기본 코 스타일', acquireCondition: '기본 지급',
+        isLimited: false, sortOrder: 0,
+      },
+      {
+        name: '귀여운 코', type: ItemType.NOSE, rarity: ItemRarity.RARE,
+        assetKey: 'nose_cute', gemPrice: null, coinPrice: 100,
+        description: '앙증맞고 귀여운 코', acquireCondition: '코인 100개로 구매',
+        isLimited: false, sortOrder: 10,
+      },
+      {
+        name: '우아한 코', type: ItemType.NOSE, rarity: ItemRarity.EPIC,
+        assetKey: 'nose_elegant', gemPrice: 80, coinPrice: null,
+        description: '품격 있는 우아한 코', acquireCondition: '보석 80개로 구매',
+        isLimited: false, sortOrder: 11,
+      },
+
+      // ══════════════════════════════════════════
+      // 입술 (LIPS)
+      // ══════════════════════════════════════════
+      {
+        name: '기본 입술', type: ItemType.LIPS, rarity: ItemRarity.COMMON,
+        assetKey: 'lips_default', gemPrice: null, coinPrice: null,
+        description: '기본 입술 스타일', acquireCondition: '기본 지급',
+        isLimited: false, sortOrder: 0,
+      },
+      {
+        name: '환한 미소', type: ItemType.LIPS, rarity: ItemRarity.RARE,
+        assetKey: 'lips_smile_big', gemPrice: null, coinPrice: 200,
+        description: '환하게 웃는 미소', acquireCondition: '코인 200개로 구매',
+        isLimited: false, sortOrder: 10,
+      },
+      {
+        name: '쿨한 미소', type: ItemType.LIPS, rarity: ItemRarity.EPIC,
+        assetKey: 'lips_cool_smirk', gemPrice: 80, coinPrice: null,
+        description: '자신감 넘치는 쿨한 미소', acquireCondition: '보석 80개로 구매',
+        isLimited: false, sortOrder: 11,
+      },
+      {
+        name: '레전드 루즈', type: ItemType.LIPS, rarity: ItemRarity.LEGENDARY,
+        assetKey: 'lips_legendary_red', gemPrice: 350, coinPrice: null,
+        description: '전설 게이머의 강렬한 입술', acquireCondition: '보석 350개로 구매',
+        isLimited: false, sortOrder: 20,
+      },
+
+      // ══════════════════════════════════════════
+      // 칭호 (TITLE)
+      // ══════════════════════════════════════════
       {
         name: '뉴비', type: ItemType.TITLE, rarity: ItemRarity.COMMON,
         assetKey: 'title_newbie', gemPrice: null, coinPrice: null,
@@ -343,7 +588,9 @@ export class AvatarService {
         isLimited: false, sortOrder: 31,
       },
 
-      // ── 게임 이펙트 ──
+      // ══════════════════════════════════════════
+      // 게임 이펙트 (EFFECT)
+      // ══════════════════════════════════════════
       {
         name: '기본 이펙트', type: ItemType.EFFECT, rarity: ItemRarity.COMMON,
         assetKey: 'effect_default', gemPrice: null, coinPrice: null,
@@ -351,7 +598,7 @@ export class AvatarService {
         isLimited: false, sortOrder: 0,
       },
       {
-        name: '불꽃 히트 이펙트', type: ItemType.EFFECT, rarity: ItemRarity.RARE,
+        name: '불꽃 히트', type: ItemType.EFFECT, rarity: ItemRarity.RARE,
         assetKey: 'effect_fire_hit', gemPrice: null, coinPrice: 600,
         description: '탭할 때마다 불꽃이 튀는 이펙트', acquireCondition: '코인 600개로 구매',
         isLimited: false, sortOrder: 10,
@@ -367,14 +614,6 @@ export class AvatarService {
         assetKey: 'effect_lightning', gemPrice: 400, coinPrice: null,
         description: '번개가 내리치는 전설 이펙트', acquireCondition: '보석 400개로 구매',
         isLimited: false, sortOrder: 21,
-      },
-
-      // ── 시즌 한정 아이템 ──
-      {
-        name: '시즌 1 챔피언 프레임', type: ItemType.FRAME, rarity: ItemRarity.LEGENDARY,
-        assetKey: 'frame_s1_champion', gemPrice: null, coinPrice: null,
-        description: '시즌 1 최상위 랭커에게만 지급', acquireCondition: '시즌 1 랭킹 상위 1%',
-        isLimited: true, sortOrder: 100,
       },
     ];
 
