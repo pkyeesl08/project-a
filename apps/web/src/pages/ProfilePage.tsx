@@ -369,8 +369,24 @@ function GamesTab() {
 }
 
 function ExternalTab() {
-  const [riotId, setRiotId] = useState('');
-  const [lookupResult, setLookupResult] = useState<any>(null);
+  return (
+    <div className="space-y-3">
+      <LolConnector />
+      <MapleConnector />
+      <FcOnlineConnector />
+
+      <div className="bg-blue-50 rounded-xl p-3 text-xs text-blue-600">
+        💡 연동하면 동네/학교 기준으로 게임별 랭킹을 확인할 수 있어요!
+      </div>
+    </div>
+  );
+}
+
+/* ── LoL 연동 ── */
+
+function LolConnector() {
+  const [input, setInput] = useState('');
+  const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [connected, setConnected] = useState(false);
@@ -381,164 +397,234 @@ function ExternalTab() {
     DIAMOND: 'text-blue-400', MASTER: 'text-purple-400',
     GRANDMASTER: 'text-red-500', CHALLENGER: 'text-yellow-300',
   };
-
   const TIER_KR: Record<string, string> = {
     IRON: '아이언', BRONZE: '브론즈', SILVER: '실버', GOLD: '골드',
     PLATINUM: '플래티넘', EMERALD: '에메랄드', DIAMOND: '다이아몬드',
     MASTER: '마스터', GRANDMASTER: '그랜드마스터', CHALLENGER: '챌린저',
   };
 
-  const handleLookup = async () => {
-    if (!riotId.includes('#')) {
-      setError('"닉네임#태그" 형식으로 입력해주세요. (예: Hide on bush#KR1)');
-      return;
-    }
-    setLoading(true);
-    setError('');
-    setLookupResult(null);
-    try {
-      const result = await api.lookupLol(riotId);
-      setLookupResult(result);
-    } catch (err: any) {
-      setError(err.message || '소환사를 찾을 수 없습니다.');
-    } finally {
-      setLoading(false);
-    }
+  const handleSearch = async () => {
+    if (!input.includes('#')) { setError('"닉네임#태그" 형식으로 입력해주세요.'); return; }
+    setLoading(true); setError(''); setResult(null);
+    try { setResult(await api.lookupLol(input)); }
+    catch (e: any) { setError(e.message || '소환사를 찾을 수 없습니다.'); }
+    finally { setLoading(false); }
   };
 
   const handleConnect = async () => {
     setLoading(true);
-    try {
-      await api.connectLol(riotId);
-      setConnected(true);
-    } catch (err: any) {
-      setError(err.message || '연동에 실패했습니다.');
-    } finally {
-      setLoading(false);
-    }
+    try { await api.connectLol(input); setConnected(true); }
+    catch (e: any) { setError(e.message || '연동 실패'); }
+    finally { setLoading(false); }
   };
 
-  const formatRank = (rank: any) => {
-    if (!rank) return null;
-    const tierKr = TIER_KR[rank.tier] || rank.tier;
-    const division = ['MASTER', 'GRANDMASTER', 'CHALLENGER'].includes(rank.tier) ? '' : ` ${rank.rank}`;
-    return { text: `${tierKr}${division}`, lp: rank.lp, wins: rank.wins, losses: rank.losses, winRate: rank.winRate, tier: rank.tier };
+  const fmtRank = (r: any) => {
+    if (!r) return null;
+    const kr = TIER_KR[r.tier] || r.tier;
+    const div = ['MASTER','GRANDMASTER','CHALLENGER'].includes(r.tier) ? '' : ` ${r.rank}`;
+    return { text: `${kr}${div}`, lp: r.lp, wins: r.wins, losses: r.losses, winRate: r.winRate, tier: r.tier };
   };
 
   return (
-    <div className="space-y-3">
-      {/* LoL 연동 */}
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-        <div className="flex items-center gap-2 mb-3">
-          <span className="text-2xl">🎮</span>
-          <h3 className="font-bold text-sm">League of Legends 연동</h3>
-        </div>
-
-        {connected ? (
-          <div className="bg-green-50 rounded-xl p-3 text-sm text-green-700 font-bold text-center">
-            ✅ 연동 완료! 동네 LoL 랭킹에 등록되었습니다.
-          </div>
-        ) : (
-          <>
-            {/* Riot ID 입력 */}
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={riotId}
-                onChange={e => { setRiotId(e.target.value); setError(''); setLookupResult(null); }}
-                placeholder="닉네임#태그 (예: Hide on bush#KR1)"
-                className="flex-1 border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-primary"
-              />
-              <button onClick={handleLookup} disabled={loading || !riotId}
-                className={`px-4 rounded-xl font-bold text-sm whitespace-nowrap transition-all active:scale-95 ${
-                  loading || !riotId ? 'bg-gray-100 text-gray-400' : 'bg-primary text-white'
-                }`}>
-                {loading ? '검색중...' : '검색'}
-              </button>
+    <GameConnectorCard icon="🎮" title="League of Legends" connected={connected} successMsg="동네 LoL 랭킹에 등록되었습니다.">
+      <SearchInput value={input} onChange={v => { setInput(v); setError(''); setResult(null); }}
+        placeholder="닉네임#태그 (예: Hide on bush#KR1)" onSearch={handleSearch} loading={loading} />
+      {error && <p className="text-red-500 text-xs mt-2">❌ {error}</p>}
+      {result && (
+        <div className="mt-3 bg-gray-900 text-white rounded-xl p-4">
+          <div className="flex items-center gap-3 mb-3">
+            <img src={`https://ddragon.leagueoflegends.com/cdn/14.1.1/img/profileicon/${result.profileIconId}.png`}
+              className="w-12 h-12 rounded-full" alt="" onError={e => { (e.target as HTMLImageElement).className = 'w-12 h-12 rounded-full bg-gray-700'; }} />
+            <div>
+              <p className="font-bold">{result.gameName}<span className="text-gray-400">#{result.tagLine}</span></p>
+              <p className="text-xs text-gray-400">레벨 {result.summonerLevel}</p>
             </div>
-
-            {error && <p className="text-red-500 text-xs mt-2">❌ {error}</p>}
-
-            {/* 검색 결과 카드 */}
-            {lookupResult && (
-              <div className="mt-3 bg-gray-900 text-white rounded-xl p-4">
-                <div className="flex items-center gap-3 mb-3">
-                  <img
-                    src={`https://ddragon.leagueoflegends.com/cdn/14.1.1/img/profileicon/${lookupResult.profileIconId}.png`}
-                    className="w-12 h-12 rounded-full"
-                    alt="icon"
-                    onError={e => { (e.target as HTMLImageElement).src = ''; (e.target as HTMLImageElement).className = 'w-12 h-12 rounded-full bg-gray-700'; }}
-                  />
-                  <div>
-                    <p className="font-bold">{lookupResult.gameName}<span className="text-gray-400">#{lookupResult.tagLine}</span></p>
-                    <p className="text-xs text-gray-400">레벨 {lookupResult.summonerLevel}</p>
-                  </div>
-                </div>
-
-                {/* 솔로랭크 */}
-                {(() => {
-                  const solo = formatRank(lookupResult.soloRank);
-                  return solo ? (
-                    <div className="bg-white/10 rounded-lg p-3 mb-2">
-                      <p className="text-xs text-gray-400 mb-1">솔로 랭크</p>
-                      <p className={`text-xl font-black ${TIER_COLORS[solo.tier] || ''}`}>
-                        {solo.text} <span className="text-sm font-normal text-gray-400">{solo.lp} LP</span>
-                      </p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        {solo.wins}승 {solo.losses}패 · 승률 {solo.winRate}%
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="bg-white/10 rounded-lg p-3 mb-2">
-                      <p className="text-xs text-gray-400">솔로 랭크</p>
-                      <p className="text-gray-500 font-bold">언랭크</p>
-                    </div>
-                  );
-                })()}
-
-                {/* 자유랭크 */}
-                {(() => {
-                  const flex = formatRank(lookupResult.flexRank);
-                  return flex ? (
-                    <div className="bg-white/10 rounded-lg p-3">
-                      <p className="text-xs text-gray-400 mb-1">자유 랭크</p>
-                      <p className={`font-bold ${TIER_COLORS[flex.tier] || ''}`}>
-                        {flex.text} · {flex.lp} LP
-                      </p>
-                    </div>
-                  ) : null;
-                })()}
-
-                {/* 연동 버튼 */}
-                <button onClick={handleConnect} disabled={loading}
-                  className="w-full mt-3 bg-accent py-3 rounded-xl font-bold active:scale-95 transition-transform">
-                  {loading ? '연동 중...' : '이 계정으로 연동하기'}
-                </button>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
-      {/* 다른 게임 (준비 중) */}
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-        <h3 className="font-bold text-sm mb-2">🔜 연동 예정</h3>
-        {[
-          { icon: '🔫', name: 'VALORANT', status: '준비 중' },
-          { icon: '🛡️', name: 'Overwatch 2', status: '준비 중' },
-          { icon: '⚽', name: 'FIFA Online', status: '준비 중' },
-        ].map(g => (
-          <div key={g.name} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
-            <span className="text-xl">{g.icon}</span>
-            <span className="flex-1 text-sm">{g.name}</span>
-            <span className="text-xs text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">{g.status}</span>
           </div>
-        ))}
-      </div>
+          {(() => { const s = fmtRank(result.soloRank); return s ? (
+            <div className="bg-white/10 rounded-lg p-3 mb-2">
+              <p className="text-xs text-gray-400 mb-1">솔로 랭크</p>
+              <p className={`text-xl font-black ${TIER_COLORS[s.tier]||''}`}>{s.text} <span className="text-sm font-normal text-gray-400">{s.lp} LP</span></p>
+              <p className="text-xs text-gray-400 mt-1">{s.wins}승 {s.losses}패 · 승률 {s.winRate}%</p>
+            </div>
+          ) : <div className="bg-white/10 rounded-lg p-3 mb-2"><p className="text-gray-500 font-bold">언랭크</p></div>; })()}
+          <ConnectButton onClick={handleConnect} loading={loading} />
+        </div>
+      )}
+    </GameConnectorCard>
+  );
+}
 
-      <div className="bg-blue-50 rounded-xl p-3 text-xs text-blue-600">
-        💡 연동하면 동네/학교 기준으로 LoL 랭킹을 확인할 수 있어요!
+/* ── 메이플스토리 연동 ── */
+
+function MapleConnector() {
+  const [input, setInput] = useState('');
+  const [result, setResult] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [connected, setConnected] = useState(false);
+
+  const handleSearch = async () => {
+    if (!input.trim()) return;
+    setLoading(true); setError(''); setResult(null);
+    try { setResult(await api.lookupMaple(input)); }
+    catch (e: any) { setError(e.message || '캐릭터를 찾을 수 없습니다.'); }
+    finally { setLoading(false); }
+  };
+
+  const handleConnect = async () => {
+    setLoading(true);
+    try { await api.connectMaple(input); setConnected(true); }
+    catch (e: any) { setError(e.message || '연동 실패'); }
+    finally { setLoading(false); }
+  };
+
+  const fmtPower = (n: number) => {
+    if (n >= 100000000) return `${(n / 100000000).toFixed(1)}억`;
+    if (n >= 10000) return `${(n / 10000).toFixed(0)}만`;
+    return n.toLocaleString();
+  };
+
+  return (
+    <GameConnectorCard icon="🍁" title="메이플스토리" connected={connected} successMsg="동네 메이플 랭킹에 등록되었습니다.">
+      <SearchInput value={input} onChange={v => { setInput(v); setError(''); setResult(null); }}
+        placeholder="캐릭터명 입력" onSearch={handleSearch} loading={loading} />
+      {error && <p className="text-red-500 text-xs mt-2">❌ {error}</p>}
+      {result && (
+        <div className="mt-3 bg-gradient-to-br from-orange-900 to-amber-900 text-white rounded-xl p-4">
+          <div className="flex items-center gap-3 mb-3">
+            {result.image ? (
+              <img src={result.image} className="w-14 h-14 rounded-lg bg-white/10" alt="" />
+            ) : (
+              <div className="w-14 h-14 rounded-lg bg-white/10 flex items-center justify-center text-2xl">🍁</div>
+            )}
+            <div>
+              <p className="font-bold text-lg">{result.characterName}</p>
+              <p className="text-xs text-white/60">{result.world} · {result.guild ? `길드: ${result.guild}` : '길드 없음'}</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2 mb-3">
+            <div className="bg-white/10 rounded-lg p-2 text-center">
+              <p className="text-lg font-black">Lv.{result.level}</p>
+              <p className="text-[10px] text-white/50">레벨</p>
+            </div>
+            <div className="bg-white/10 rounded-lg p-2 text-center">
+              <p className="text-lg font-black">{result.class}</p>
+              <p className="text-[10px] text-white/50">직업</p>
+            </div>
+            <div className="bg-white/10 rounded-lg p-2 text-center">
+              <p className="text-lg font-black">{fmtPower(result.combatPower)}</p>
+              <p className="text-[10px] text-white/50">전투력</p>
+            </div>
+          </div>
+          <ConnectButton onClick={handleConnect} loading={loading} />
+        </div>
+      )}
+    </GameConnectorCard>
+  );
+}
+
+/* ── FC 온라인 연동 ── */
+
+function FcOnlineConnector() {
+  const [input, setInput] = useState('');
+  const [result, setResult] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [connected, setConnected] = useState(false);
+
+  const handleSearch = async () => {
+    if (!input.trim()) return;
+    setLoading(true); setError(''); setResult(null);
+    try { setResult(await api.lookupFcOnline(input)); }
+    catch (e: any) { setError(e.message || '유저를 찾을 수 없습니다.'); }
+    finally { setLoading(false); }
+  };
+
+  const handleConnect = async () => {
+    setLoading(true);
+    try { await api.connectFcOnline(input); setConnected(true); }
+    catch (e: any) { setError(e.message || '연동 실패'); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <GameConnectorCard icon="⚽" title="FC 온라인" connected={connected} successMsg="동네 FC 온라인 랭킹에 등록되었습니다.">
+      <SearchInput value={input} onChange={v => { setInput(v); setError(''); setResult(null); }}
+        placeholder="FC 온라인 닉네임 입력" onSearch={handleSearch} loading={loading} />
+      {error && <p className="text-red-500 text-xs mt-2">❌ {error}</p>}
+      {result && (
+        <div className="mt-3 bg-gradient-to-br from-green-900 to-emerald-900 text-white rounded-xl p-4">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-2xl">⚽</div>
+            <div>
+              <p className="font-bold text-lg">{result.nickname}</p>
+              <p className="text-xs text-white/60">레벨 {result.level}</p>
+            </div>
+          </div>
+          {result.maxDivision?.length > 0 ? (
+            <div className="space-y-2 mb-3">
+              {result.maxDivision.map((d: any, i: number) => (
+                <div key={i} className="bg-white/10 rounded-lg p-3">
+                  <p className="text-xs text-white/50">{d.matchType}</p>
+                  <p className="text-lg font-black">{d.division}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="bg-white/10 rounded-lg p-3 mb-3 text-center">
+              <p className="text-white/50">등급 정보 없음</p>
+            </div>
+          )}
+          <ConnectButton onClick={handleConnect} loading={loading} />
+        </div>
+      )}
+    </GameConnectorCard>
+  );
+}
+
+/* ── 공통 컴포넌트 ── */
+
+function GameConnectorCard({ icon, title, connected, successMsg, children }: {
+  icon: string; title: string; connected: boolean; successMsg: string; children: React.ReactNode;
+}) {
+  return (
+    <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-2xl">{icon}</span>
+        <h3 className="font-bold text-sm">{title}</h3>
       </div>
+      {connected ? (
+        <div className="bg-green-50 rounded-xl p-3 text-sm text-green-700 font-bold text-center">
+          ✅ 연동 완료! {successMsg}
+        </div>
+      ) : children}
     </div>
+  );
+}
+
+function SearchInput({ value, onChange, placeholder, onSearch, loading }: {
+  value: string; onChange: (v: string) => void; placeholder: string; onSearch: () => void; loading: boolean;
+}) {
+  return (
+    <div className="flex gap-2">
+      <input type="text" value={value} onChange={e => onChange(e.target.value)}
+        placeholder={placeholder} onKeyDown={e => e.key === 'Enter' && onSearch()}
+        className="flex-1 border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-primary" />
+      <button onClick={onSearch} disabled={loading || !value.trim()}
+        className={`px-4 rounded-xl font-bold text-sm whitespace-nowrap transition-all active:scale-95 ${
+          loading || !value.trim() ? 'bg-gray-100 text-gray-400' : 'bg-primary text-white'
+        }`}>
+        {loading ? '검색중...' : '검색'}
+      </button>
+    </div>
+  );
+}
+
+function ConnectButton({ onClick, loading }: { onClick: () => void; loading: boolean }) {
+  return (
+    <button onClick={onClick} disabled={loading}
+      className="w-full mt-2 bg-accent py-3 rounded-xl font-bold active:scale-95 transition-transform text-white">
+      {loading ? '연동 중...' : '이 계정으로 연동하기'}
+    </button>
   );
 }

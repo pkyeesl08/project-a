@@ -8,6 +8,7 @@ import MapPage from './pages/MapPage';
 import BattlePage from './pages/BattlePage';
 import ProfilePage from './pages/ProfilePage';
 import RegisterPage from './pages/RegisterPage';
+import ExternalRankingPage from './pages/ExternalRankingPage';
 
 export default function App() {
   return (
@@ -16,6 +17,7 @@ export default function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/games" element={<GamesPage />} />
         <Route path="/rankings" element={<RankingsPage />} />
+        <Route path="/rankings/external" element={<ExternalRankingPage />} />
         <Route path="/map" element={<MapPage />} />
         <Route path="/battle" element={<BattlePage />} />
         <Route path="/profile" element={<ProfilePage />} />

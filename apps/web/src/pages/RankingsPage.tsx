@@ -1,9 +1,11 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const SCOPES = ['동네', '학교', '구/군', '시/도', '전국'];
 
 export default function RankingsPage() {
   const [activeScope, setActiveScope] = useState(0);
+  const navigate = useNavigate();
 
   const mockRankings = Array.from({ length: 20 }, (_, i) => ({
     rank: i + 1,
@@ -28,6 +30,18 @@ export default function RankingsPage() {
           </button>
         ))}
       </div>
+
+      {/* 외부 게임 랭킹 배너 */}
+      <button onClick={() => navigate('/rankings/external')}
+        className="w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-xl p-4 mb-4 text-white text-left active:scale-[0.98] transition-transform">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="font-black text-sm">🎮 외부 게임 동네 랭킹</p>
+            <p className="text-xs text-white/70 mt-0.5">LoL · 메이플스토리 · FC 온라인</p>
+          </div>
+          <span className="text-white/60 text-xl">→</span>
+        </div>
+      </button>
 
       {/* My Ranking */}
       <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 mb-4 flex items-center justify-between">
