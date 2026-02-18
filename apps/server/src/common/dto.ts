@@ -69,9 +69,10 @@ export class VerifySchoolDto {
 const VALID_GAME_TYPES = [
   'timing_hit', 'speed_tap', 'lightning_reaction', 'balloon_pop', 'whack_a_mole',
   'memory_flash', 'color_match', 'bigger_number', 'same_picture', 'odd_even',
-  'shake_it', 'direction_swipe', 'tilt_balance', 'stop_the_bar', 'rps_speed',
+  'direction_swipe', 'stop_the_bar', 'rps_speed', 'sequence_tap', 'reverse_reaction',
   'line_trace', 'target_sniper', 'dark_room_tap', 'screw_center', 'line_grow',
-  'math_speed', 'mic_shout', 'shell_game', 'emoji_sort', 'count_more',
+  'math_speed', 'shell_game', 'emoji_sort', 'count_more',
+  'dual_precision', 'reverse_memory', 'rapid_aim',
 ];
 
 export class SubmitResultDto {

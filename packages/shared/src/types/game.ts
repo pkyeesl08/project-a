@@ -14,11 +14,11 @@ export enum GameType {
   SAME_PICTURE = 'same_picture',
   ODD_EVEN = 'odd_even',
   // 🎮 액션/모션
-  SHAKE_IT = 'shake_it',
   DIRECTION_SWIPE = 'direction_swipe',
-  TILT_BALANCE = 'tilt_balance',
   STOP_THE_BAR = 'stop_the_bar',
   RPS_SPEED = 'rps_speed',
+  SEQUENCE_TAP = 'sequence_tap',
+  REVERSE_REACTION = 'reverse_reaction',
   // 🎯 정밀/집중
   LINE_TRACE = 'line_trace',
   TARGET_SNIPER = 'target_sniper',
@@ -27,10 +27,12 @@ export enum GameType {
   LINE_GROW = 'line_grow',
   // 🌟 특수/파티
   MATH_SPEED = 'math_speed',
-  MIC_SHOUT = 'mic_shout',
   SHELL_GAME = 'shell_game',
   EMOJI_SORT = 'emoji_sort',
   COUNT_MORE = 'count_more',
+  DUAL_PRECISION = 'dual_precision',
+  REVERSE_MEMORY = 'reverse_memory',
+  RAPID_AIM = 'rapid_aim',
 }
 
 export enum GameCategory {
@@ -111,20 +113,10 @@ export const GAME_CONFIGS: Record<GameType, GameConfig> = {
     durationMs: 3000, scoreMetric: 'correct_rate', icon: '🔀',
   },
   // 🎮 액션/모션
-  [GameType.SHAKE_IT]: {
-    type: GameType.SHAKE_IT, category: GameCategory.ACTION,
-    name: '흔들어 승부', description: '폰을 미친 듯이 흔들기',
-    durationMs: 3000, scoreMetric: 'shake_intensity', icon: '📳',
-  },
   [GameType.DIRECTION_SWIPE]: {
     type: GameType.DIRECTION_SWIPE, category: GameCategory.ACTION,
     name: '방향 스와이프', description: '화살표 방향대로 빠르게 스와이프',
     durationMs: 5000, scoreMetric: 'correct_swipes', icon: '👋',
-  },
-  [GameType.TILT_BALANCE]: {
-    type: GameType.TILT_BALANCE, category: GameCategory.ACTION,
-    name: '기울기 균형', description: '폰 기울여서 공을 목표 지점에 놓기',
-    durationMs: 5000, scoreMetric: 'time_to_target', icon: '⚖️',
   },
   [GameType.STOP_THE_BAR]: {
     type: GameType.STOP_THE_BAR, category: GameCategory.ACTION,
@@ -135,6 +127,16 @@ export const GAME_CONFIGS: Record<GameType, GameConfig> = {
     type: GameType.RPS_SPEED, category: GameCategory.ACTION,
     name: '가위바위보 스피드', description: 'AI 상대로 이기는 손을 빠르게 선택',
     durationMs: 5000, scoreMetric: 'win_streak', icon: '✊',
+  },
+  [GameType.SEQUENCE_TAP]: {
+    type: GameType.SEQUENCE_TAP, category: GameCategory.ACTION,
+    name: '순서대로 탭', description: '1~7 숫자를 순서대로 최대한 빠르게 탭',
+    durationMs: 7000, scoreMetric: 'elapsed_ms', icon: '🔢',
+  },
+  [GameType.REVERSE_REACTION]: {
+    type: GameType.REVERSE_REACTION, category: GameCategory.ACTION,
+    name: '역방향 반응', description: '화살표 반대 방향을 빠르게 탭',
+    durationMs: 5000, scoreMetric: 'speed_pts', icon: '🔄',
   },
   // 🎯 정밀/집중
   [GameType.LINE_TRACE]: {
@@ -168,11 +170,6 @@ export const GAME_CONFIGS: Record<GameType, GameConfig> = {
     name: '연산 스피드', description: '간단한 덧셈 문제를 빠르게 풀기',
     durationMs: 5000, scoreMetric: 'correct_answers', icon: '🧮',
   },
-  [GameType.MIC_SHOUT]: {
-    type: GameType.MIC_SHOUT, category: GameCategory.PARTY,
-    name: '마이크 소리치기', description: '마이크에 최대한 큰 소리를 내기',
-    durationMs: 3000, scoreMetric: 'max_decibel', icon: '🎤',
-  },
   [GameType.SHELL_GAME]: {
     type: GameType.SHELL_GAME, category: GameCategory.PARTY,
     name: '어디에 숨었게?', description: '컵 3개 중 공이 숨겨진 컵을 눈으로 추적해 맞히기',
@@ -187,5 +184,20 @@ export const GAME_CONFIGS: Record<GameType, GameConfig> = {
     type: GameType.COUNT_MORE, category: GameCategory.PARTY,
     name: '누가 더 많지?', description: '두 그룹의 아이콘 수를 비교해서 많은 쪽 선택',
     durationMs: 3000, scoreMetric: 'correct_rate', icon: '👀',
+  },
+  [GameType.DUAL_PRECISION]: {
+    type: GameType.DUAL_PRECISION, category: GameCategory.PRECISION,
+    name: '이중 정밀 탭', description: '두 타겟을 순서대로 정중앙에 탭',
+    durationMs: 5000, scoreMetric: 'center_accuracy', icon: '🎯',
+  },
+  [GameType.REVERSE_MEMORY]: {
+    type: GameType.REVERSE_MEMORY, category: GameCategory.PUZZLE,
+    name: '역순 기억', description: '보여준 숫자를 거꾸로 기억해서 탭',
+    durationMs: 6000, scoreMetric: 'correct_count', icon: '🧠',
+  },
+  [GameType.RAPID_AIM]: {
+    type: GameType.RAPID_AIM, category: GameCategory.PRECISION,
+    name: '연속 조준', description: '연속으로 나타나는 타겟의 중앙을 최대한 정확하게 탭',
+    durationMs: 8000, scoreMetric: 'aim_accuracy', icon: '🔵',
   },
 };
