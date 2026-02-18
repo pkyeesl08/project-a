@@ -5,9 +5,19 @@ import { GamesController } from './games.controller';
 import { GamesService } from './games.service';
 import { UsersModule } from '../users/users.module';
 import { RankingsModule } from '../rankings/rankings.module';
+import { SeasonsModule } from '../seasons/seasons.module';
+import { MissionsModule } from '../missions/missions.module';
+import { AchievementsModule } from '../achievements/achievements.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([GameResultEntity]), UsersModule, RankingsModule],
+  imports: [
+    TypeOrmModule.forFeature([GameResultEntity]),
+    UsersModule,
+    RankingsModule,
+    SeasonsModule,
+    MissionsModule,
+    AchievementsModule,
+  ],
   controllers: [GamesController],
   providers: [GamesService],
   exports: [GamesService],

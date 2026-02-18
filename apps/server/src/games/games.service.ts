@@ -4,6 +4,9 @@ import { Repository } from 'typeorm';
 import { GameResultEntity } from './game-result.entity';
 import { UsersService } from '../users/users.service';
 import { RankingsService } from '../rankings/rankings.service';
+import { SeasonsService } from '../seasons/seasons.service';
+import { MissionsService } from '../missions/missions.service';
+import { AchievementsService } from '../achievements/achievements.service';
 import { normalizeScore, calculateElo, calculateSoloEloAdjustment, GameType, GAME_CONFIGS } from '@donggamerank/shared';
 
 @Injectable()
@@ -13,6 +16,9 @@ export class GamesService {
     private resultsRepo: Repository<GameResultEntity>,
     private usersService: UsersService,
     private rankingsService: RankingsService,
+    private seasonsService: SeasonsService,
+    private missionsService: MissionsService,
+    private achievementsService: AchievementsService,
   ) {}
 
   async submitResult(userId: string, data: {
@@ -32,6 +38,9 @@ export class GamesService {
     const statsBefore = await this.getPersonalStats(userId, data.gameType);
     const isNewHighScore = normalized > statsBefore.best;
 
+    // 현재 시즌 ID 조회
+    const seasonId = await this.seasonsService.getCurrentSeasonId();
+
     const result = this.resultsRepo.create({
       userId,
       gameType: data.gameType,
@@ -41,6 +50,7 @@ export class GamesService {
       opponentId: data.opponentId ?? null,
       matchId: data.matchId ?? null,
       regionId: user.primaryRegionId,
+      seasonId,
       metadata: data.metadata ?? null,
     });
 
@@ -63,7 +73,6 @@ export class GamesService {
         eloChange = eloResult.change;
       }
     } else {
-      // 솔로 모드 — 저장 전 통계 사용 (0 나누기 방지됨)
       const soloResult = calculateSoloEloAdjustment(
         user.eloRating, normalized, statsBefore.best, statsBefore.average,
       );
@@ -87,12 +96,53 @@ export class GamesService {
       'region', user.primaryRegionId, data.gameType, userId,
     );
 
+    const regionRank = regionRankInfo?.rank ?? null;
+
+    // ── 미션 / 업적 비동기 처리 (실패해도 결과 반환에 영향 없음) ──
+    const statsAfter = await this.getPersonalStats(userId, data.gameType);
+    const totalGames = await this.resultsRepo.count({ where: { userId } });
+    const uniqueGameTypesCount = await this.getUniqueGameTypeCount(userId);
+
+    const pvpResults = await this.resultsRepo.find({
+      where: { userId, mode: 'pvp' },
+      order: { playedAt: 'DESC' },
+      take: 20,
+    });
+    const pvpWins = pvpResults.filter(r => r.metadata?.won === true).length;
+    let pvpStreak = 0;
+    for (const r of pvpResults) {
+      if (r.metadata?.won === true) pvpStreak++;
+      else break;
+    }
+
+    Promise.allSettled([
+      this.missionsService.handleGameResult(userId, {
+        gameType: data.gameType,
+        mode: data.mode,
+        isNewHighScore,
+        won: data.metadata?.won === true,
+      }),
+      this.achievementsService.checkAfterGame(userId, {
+        gameType: data.gameType,
+        normalizedScore: normalized,
+        rawScore: data.score,
+        mode: data.mode,
+        isNewHighScore,
+        totalGames,
+        pvpWins,
+        pvpStreak,
+        regionRank,
+        uniqueGameTypes: uniqueGameTypesCount,
+      }),
+    ]);
+
     return {
       resultId: saved.id,
       rankChange: eloChange,
       newElo,
-      regionRank: regionRankInfo?.rank ?? null,
+      regionRank,
       isNewHighScore,
+      seasonId,
     };
   }
 
@@ -128,6 +178,16 @@ export class GamesService {
       average: Math.round(scores.reduce((a, b) => a + b, 0) / scores.length),
       count: scores.length,
     };
+  }
+
+  /** 유저가 플레이한 고유 게임 타입 수 */
+  private async getUniqueGameTypeCount(userId: string): Promise<number> {
+    const raw = await this.resultsRepo
+      .createQueryBuilder('r')
+      .select('COUNT(DISTINCT r.gameType)', 'count')
+      .where('r.userId = :userId', { userId })
+      .getRawOne();
+    return parseInt(raw?.count ?? '0');
   }
 
   getGameTypes() {

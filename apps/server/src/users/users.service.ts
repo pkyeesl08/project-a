@@ -68,6 +68,16 @@ export class UsersService {
     await this.usersRepo.update(userId, { eloRating: newRating });
   }
 
+  /** 미션/어치브먼트 보상용 ELO 가산 */
+  async addElo(userId: string, amount: number): Promise<void> {
+    await this.usersRepo
+      .createQueryBuilder()
+      .update()
+      .set({ eloRating: () => `"eloRating" + ${Math.abs(amount)}` })
+      .where('id = :userId', { userId })
+      .execute();
+  }
+
   async getStats(userId: string) {
     const user = await this.findById(userId);
     if (!user) throw new NotFoundException('User not found');

@@ -11,6 +11,11 @@ import { MapModule } from './map/map.module';
 import { MatchModule } from './match/match.module';
 import { RedisModule } from './redis/redis.module';
 import { RateLimitMiddleware } from './common/rate-limit.middleware';
+import { SeasonsModule } from './seasons/seasons.module';
+import { MissionsModule } from './missions/missions.module';
+import { AchievementsModule } from './achievements/achievements.module';
+import { FriendsModule } from './friends/friends.module';
+import { EventsModule } from './events/events.module';
 
 @Module({
   imports: [
@@ -35,6 +40,11 @@ import { RateLimitMiddleware } from './common/rate-limit.middleware';
     ExternalModule,
     MapModule,
     MatchModule,
+    SeasonsModule,
+    MissionsModule,
+    AchievementsModule,
+    FriendsModule,
+    EventsModule,
   ],
 })
 export class AppModule implements NestModule {
