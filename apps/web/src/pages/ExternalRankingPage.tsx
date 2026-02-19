@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { api } from '../lib/api';
+import { useAuthStore } from '../stores/authStore';
 
 type GameTab = 'lol' | 'maple' | 'fconline' | 'pubg' | 'steam';
 
@@ -79,21 +81,57 @@ const PUBG_TIER_COLORS: Record<string, string> = {
 /* ═══════════════════════════════════════
  * 메인 페이지
  * ═══════════════════════════════════════ */
+function getMockRanking(game: GameTab): any[] {
+  if (game === 'lol') return MOCK_LOL_RANKING;
+  if (game === 'maple') return MOCK_MAPLE_RANKING;
+  if (game === 'pubg') return MOCK_PUBG_RANKING;
+  if (game === 'steam') return MOCK_STEAM_RANKING;
+  return MOCK_FC_RANKING;
+}
+
 export default function ExternalRankingPage() {
   const [activeGame, setActiveGame] = useState<GameTab>('lol');
   const [scope, setScope] = useState<'region' | 'school'>('region');
-  const [selectedRegion, setSelectedRegion] = useState(MOCK_REGIONS[0].id);
+  const [ranking, setRanking] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  const currentGame = GAMES.find(g => g.key === activeGame)!;
-  const regionName  = MOCK_REGIONS.find(r => r.id === selectedRegion)?.name || '역삼동';
+  const user = useAuthStore(s => s.user);
+  const [userProfile, setUserProfile] = useState<any>(null);
 
-  const ranking: any[] =
-    activeGame === 'lol'      ? MOCK_LOL_RANKING
-    : activeGame === 'maple'  ? MOCK_MAPLE_RANKING
-    : activeGame === 'pubg'   ? MOCK_PUBG_RANKING
-    : activeGame === 'steam'  ? MOCK_STEAM_RANKING
-    : MOCK_FC_RANKING;
+  useEffect(() => {
+    api.getMe().then(setUserProfile).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    setLoading(true);
+    const scopeId: string | undefined =
+      scope === 'region' ? userProfile?.primaryRegionId : userProfile?.schoolId;
+
+    if (!scopeId) {
+      setRanking(getMockRanking(activeGame));
+      setLoading(false);
+      return;
+    }
+
+    let apiCall: Promise<any[]>;
+    if (activeGame === 'lol') apiCall = api.getLolRanking(scope, scopeId);
+    else if (activeGame === 'pubg') apiCall = api.getPubgRanking(scope, scopeId);
+    else if (activeGame === 'steam') apiCall = api.getSteamRanking(scope, scopeId);
+    else {
+      setRanking(getMockRanking(activeGame));
+      setLoading(false);
+      return;
+    }
+
+    apiCall
+      .then(data => setRanking(data.length > 0 ? data : getMockRanking(activeGame)))
+      .catch(() => setRanking(getMockRanking(activeGame)))
+      .finally(() => setLoading(false));
+  }, [activeGame, scope, userProfile]);
+
+  const currentGame = GAMES.find(g => g.key === activeGame)!;
+  const regionName = user?.regionName ?? userProfile?.regionName ?? '내 동네';
 
   return (
     <div className="p-4 space-y-4 pb-24">
@@ -145,15 +183,9 @@ export default function ExternalRankingPage() {
           ))}
         </div>
         {scope === 'region' && (
-          <select
-            value={selectedRegion}
-            onChange={e => setSelectedRegion(e.target.value)}
-            className="flex-1 bg-gray-100 rounded-lg px-3 py-1.5 text-sm font-medium border-0 focus:outline-none"
-          >
-            {MOCK_REGIONS.map(r => (
-              <option key={r.id} value={r.id}>{r.district} {r.name}</option>
-            ))}
-          </select>
+          <div className="flex-1 bg-gray-100 rounded-lg px-3 py-1.5 text-sm font-medium flex items-center">
+            🏠 {regionName}
+          </div>
         )}
       </div>
 
@@ -175,6 +207,9 @@ export default function ExternalRankingPage() {
       )}
 
       {/* 랭킹 리스트 */}
+      {loading ? (
+        <div className="text-center py-12 text-gray-400 text-sm">랭킹 불러오는 중...</div>
+      ) : (
       <div className="space-y-2">
         {/* Top 3 Podium */}
         {ranking.length >= 3 && (
@@ -228,6 +263,7 @@ export default function ExternalRankingPage() {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

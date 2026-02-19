@@ -158,7 +158,7 @@ export default function EndlessModePage() {
     if (phase !== 'gameover' || submitting) return;
     setSubmitting(true);
     api.submitResult({
-      gameType: GameType.SPEED_TAP,
+      gameType: 'endless',
       score: roundRef.current,
       mode: 'solo',
       metadata: { subMode: 'endless', rounds: roundRef.current },

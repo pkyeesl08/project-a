@@ -1,28 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GAME_CONFIGS, GameType } from '@donggamerank/shared';
+import { GAME_CONFIGS } from '@donggamerank/shared';
 import { api, AchievementItem, Friend, FriendRequest } from '../lib/api';
 import { useAvatarStore, FRAME_RING, TITLE_STYLE } from '../stores/avatarStore';
+import { useAuthStore } from '../stores/authStore';
 import { getTier } from '../lib/tier';
-
-const MOCK_PROFILE = {
-  nickname: '빠른호랑이1234',
-  elo: 1247,
-  region: '역삼동',
-  school: '서울대학교',
-  totalGames: 342,
-  totalWins: 198,
-  winRate: 57.9,
-  currentStreak: 5,
-  regionRank: 42,
-  schoolRank: 15,
-  badges: ['🏆', '🔥', '⚡', '🎯', '💎'],
-  topGames: [
-    { type: GameType.SPEED_TAP, rank: 3, score: 847 },
-    { type: GameType.LIGHTNING_REACTION, rank: 12, score: 156 },
-    { type: GameType.TIMING_HIT, rank: 28, score: 42 },
-  ],
-};
 
 const MOCK_ACHIEVEMENTS: AchievementItem[] = [
   { type: 'FIRST_BLOOD', title: '첫 게임', description: '첫 게임 완료', icon: '🎮', rewardElo: 5, isUnlocked: true },
@@ -42,9 +24,12 @@ export default function ProfilePage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<Tab>('stats');
   const [showNicknameEdit, setShowNicknameEdit] = useState(false);
+  const { user, updateUser: updateAuthUser } = useAuthStore();
   const { avatar, coins, gems, fetchAll } = useAvatarStore();
+  const [profile, setProfile] = useState<any>(null);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => { api.getMe().then(setProfile).catch(() => {}); }, []);
 
   const activeFrame = avatar?.activeFrame;
   const activeTitle = avatar?.activeTitle;
@@ -55,7 +40,16 @@ export default function ProfilePage() {
     ? (TITLE_STYLE[activeTitle.assetKey] ?? 'bg-white/20 text-white')
     : null;
 
-  const tier = getTier(MOCK_PROFILE.elo);
+  const displayNickname = user?.nickname ?? profile?.nickname ?? '...';
+  const displayElo = user?.eloRating ?? profile?.eloRating ?? 0;
+  const displayRegion = user?.regionName ?? profile?.regionName ?? '동네 미설정';
+  const displaySchool = user?.schoolName ?? profile?.schoolName ?? null;
+  const displayRegionRank = profile?.regionRank ?? '—';
+  const displayWinRate = profile?.winRate ?? '—';
+  const displayStreak = profile?.currentStreak ?? 0;
+  const displayBadges: string[] = profile?.badges ?? [];
+
+  const tier = getTier(displayElo);
 
   const TABS: { key: Tab; label: string }[] = [
     { key: 'stats', label: '📊 전적' },
@@ -88,7 +82,7 @@ export default function ProfilePage() {
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-xl font-black">{MOCK_PROFILE.nickname}</h1>
+              <h1 className="text-xl font-black">{displayNickname}</h1>
               <button onClick={() => setShowNicknameEdit(true)}
                 className="bg-white/20 rounded-lg px-2 py-0.5 text-xs active:scale-95 transition-transform">
                 ✏️ 수정
@@ -106,8 +100,10 @@ export default function ProfilePage() {
               </span>
             </div>
             <div className="flex gap-2 mt-1 flex-wrap">
-              <span className="bg-white/20 rounded-full px-2 py-0.5 text-xs">🏠 {MOCK_PROFILE.region}</span>
-              <span className="bg-white/20 rounded-full px-2 py-0.5 text-xs">🏫 {MOCK_PROFILE.school}</span>
+              <span className="bg-white/20 rounded-full px-2 py-0.5 text-xs">🏠 {displayRegion}</span>
+              {displaySchool && (
+                <span className="bg-white/20 rounded-full px-2 py-0.5 text-xs">🏫 {displaySchool}</span>
+              )}
             </div>
           </div>
           <button className="bg-white/20 p-2 rounded-lg text-lg">⚙️</button>
@@ -132,10 +128,10 @@ export default function ProfilePage() {
         {/* Stats Summary */}
         <div className="grid grid-cols-4 gap-2 mt-4">
           {[
-            { label: 'ELO', value: MOCK_PROFILE.elo.toLocaleString() },
-            { label: '동네 랭킹', value: `#${MOCK_PROFILE.regionRank}` },
-            { label: '승률', value: `${MOCK_PROFILE.winRate}%` },
-            { label: '연승', value: `${MOCK_PROFILE.currentStreak}🔥` },
+            { label: 'ELO', value: displayElo.toLocaleString() },
+            { label: '동네 랭킹', value: `#${displayRegionRank}` },
+            { label: '승률', value: displayWinRate !== '—' ? `${displayWinRate}%` : '—' },
+            { label: '연승', value: `${displayStreak}🔥` },
           ].map((stat) => (
             <div key={stat.label} className="bg-white/10 rounded-lg p-2 text-center">
               <p className="text-lg font-black">{stat.value}</p>
@@ -145,22 +141,24 @@ export default function ProfilePage() {
         </div>
 
         {/* Badges */}
-        <div className="flex gap-2 mt-3">
-          {MOCK_PROFILE.badges.map((badge, i) => (
-            <span key={i} className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center text-lg">
-              {badge}
-            </span>
-          ))}
-        </div>
+        {displayBadges.length > 0 && (
+          <div className="flex gap-2 mt-3">
+            {displayBadges.map((badge, i) => (
+              <span key={i} className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center text-lg">
+                {badge}
+              </span>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Nickname Edit Modal */}
       {showNicknameEdit && (
         <NicknameEditor
-          currentNickname={MOCK_PROFILE.nickname}
+          currentNickname={displayNickname}
           onClose={() => setShowNicknameEdit(false)}
           onSaved={(name) => {
-            MOCK_PROFILE.nickname = name;
+            updateAuthUser({ nickname: name });
             setShowNicknameEdit(false);
           }}
         />
@@ -277,31 +275,45 @@ function Rule({ ok, text }: { ok: boolean; text: string }) {
 /* ── 탭 컴포넌트들 ── */
 
 function StatsTab() {
+  const [history, setHistory] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.getGameHistory(10)
+      .then((data: any) => setHistory(Array.isArray(data?.results) ? data.results : Array.isArray(data) ? data : []))
+      .catch(() => setHistory([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const totalGames = history.length;
+  const wins = history.filter((g: any) => g.result === 'win' || g.won === true).length;
+  const losses = totalGames - wins;
+  const recentResults = history.slice(0, 10).map((g: any) =>
+    (g.result === 'win' || g.won === true) ? 'W' : 'L'
+  );
+
+  if (loading) return <div className="text-center py-8 text-gray-400 text-sm">로딩 중...</div>;
+
   return (
     <div className="space-y-3">
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-        <h3 className="font-bold text-sm mb-3">📈 최근 전적</h3>
-        <div className="flex gap-1">
-          {['W', 'W', 'L', 'W', 'W', 'W', 'L', 'W', 'L', 'W'].map((r, i) => (
-            <div key={i} className={`flex-1 h-8 rounded flex items-center justify-center text-xs font-bold text-white ${r === 'W' ? 'bg-green-500' : 'bg-red-400'}`}>
-              {r}
-            </div>
-          ))}
+      {recentResults.length > 0 && (
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+          <h3 className="font-bold text-sm mb-3">📈 최근 전적</h3>
+          <div className="flex gap-1">
+            {recentResults.map((r, i) => (
+              <div key={i} className={`flex-1 h-8 rounded flex items-center justify-center text-xs font-bold text-white ${r === 'W' ? 'bg-green-500' : 'bg-red-400'}`}>
+                {r}
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
       <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
         <h3 className="font-bold text-sm mb-3">🎮 총 전적</h3>
         <div className="grid grid-cols-3 gap-4 text-center">
-          <div><p className="text-2xl font-black">{MOCK_PROFILE.totalGames}</p><p className="text-xs text-gray-400">총 게임</p></div>
-          <div><p className="text-2xl font-black text-green-500">{MOCK_PROFILE.totalWins}</p><p className="text-xs text-gray-400">승리</p></div>
-          <div><p className="text-2xl font-black text-red-400">{MOCK_PROFILE.totalGames - MOCK_PROFILE.totalWins}</p><p className="text-xs text-gray-400">패배</p></div>
-        </div>
-      </div>
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-        <h3 className="font-bold text-sm mb-3">🏆 시즌 기록</h3>
-        <div className="flex items-center justify-between py-2">
-          <div><p className="font-medium text-sm">Season 1</p><p className="text-xs text-gray-400">골드 · 최종 #42</p></div>
-          <span className="text-xl">🥇</span>
+          <div><p className="text-2xl font-black">{totalGames}</p><p className="text-xs text-gray-400">총 게임</p></div>
+          <div><p className="text-2xl font-black text-green-500">{wins}</p><p className="text-xs text-gray-400">승리</p></div>
+          <div><p className="text-2xl font-black text-red-400">{losses}</p><p className="text-xs text-gray-400">패배</p></div>
         </div>
       </div>
     </div>
@@ -309,27 +321,52 @@ function StatsTab() {
 }
 
 function GamesTab() {
+  const [history, setHistory] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.getGameHistory(20)
+      .then((data: any) => setHistory(Array.isArray(data?.results) ? data.results : Array.isArray(data) ? data : []))
+      .catch(() => setHistory([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="text-center py-8 text-gray-400 text-sm">로딩 중...</div>;
+
+  if (history.length === 0) {
+    return (
+      <div className="bg-gray-50 rounded-xl p-8 text-center text-gray-400 text-sm">
+        아직 게임 기록이 없어요. 게임을 해보세요!
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-2">
-      {MOCK_PROFILE.topGames.map((game) => {
-        const config = GAME_CONFIGS[game.type];
+      {history.map((game: any, i) => {
+        const config = game.gameType ? GAME_CONFIGS[game.gameType as keyof typeof GAME_CONFIGS] : null;
         return (
-          <div key={game.type} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex items-center gap-3">
-            <span className="text-3xl">{config.icon}</span>
+          <div key={game.id ?? i} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex items-center gap-3">
+            <span className="text-3xl">{config?.icon ?? '🎮'}</span>
             <div className="flex-1">
-              <p className="font-bold text-sm">{config.name}</p>
-              <p className="text-xs text-gray-400">최고 점수: {game.score}</p>
+              <p className="font-bold text-sm">{config?.name ?? game.gameType ?? '게임'}</p>
+              <p className="text-xs text-gray-400">점수: {game.score ?? 0}</p>
             </div>
             <div className="text-right">
-              <p className="text-lg font-black text-primary">#{game.rank}</p>
-              <p className="text-[10px] text-gray-400">동네 랭킹</p>
+              {game.result && (
+                <p className={`text-sm font-bold ${game.result === 'win' || game.won ? 'text-green-500' : 'text-red-400'}`}>
+                  {game.result === 'win' || game.won ? 'WIN' : 'LOSE'}
+                </p>
+              )}
+              {game.eloChange != null && (
+                <p className={`text-xs font-bold ${game.eloChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {game.eloChange >= 0 ? '+' : ''}{game.eloChange} ELO
+                </p>
+              )}
             </div>
           </div>
         );
       })}
-      <p className="text-center text-xs text-gray-400 pt-2">
-        25종 게임 중 {MOCK_PROFILE.topGames.length}종 플레이
-      </p>
     </div>
   );
 }
@@ -341,7 +378,7 @@ function AchievementsTab() {
   useEffect(() => {
     api.getAchievements()
       .then(setAchievements)
-      .catch(() => setAchievements(MOCK_ACHIEVEMENTS))
+      .catch(() => setAchievements([]))
       .finally(() => setLoading(false));
   }, []);
 

@@ -1,6 +1,8 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect, useCallback } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { GAME_CONFIGS, GameType, GameCategory } from '@donggamerank/shared';
+import { useAuthStore } from '../stores/authStore';
+import { socketService } from '../lib/socket';
 
 type MatchMode = 'region' | 'school' | 'national' | 'friend';
 
@@ -15,15 +17,40 @@ export default function BattlePage() {
   const [selectedMode, setSelectedMode] = useState<MatchMode | null>(null);
   const [selectedGame, setSelectedGame] = useState<GameType | null>(null);
   const [isSearching, setIsSearching] = useState(false);
+  const navigate = useNavigate();
 
+  const { user, accessToken } = useAuthStore();
   const games = Object.values(GAME_CONFIGS);
 
-  const handleStartMatch = () => {
-    if (!selectedMode || !selectedGame) return;
+  // 매칭 완료 이벤트 리스너 등록
+  useEffect(() => {
+    const onMatchFound = (data: unknown) => {
+      setIsSearching(false);
+      const match = data as { matchId: string; opponent: { nickname: string } };
+      navigate(`/play/${selectedGame}`, {
+        state: { mode: 'pvp', matchId: match.matchId, opponent: match.opponent },
+      });
+    };
+    socketService.on('match:found', onMatchFound);
+    return () => socketService.off('match:found', onMatchFound);
+  }, [selectedGame, navigate]);
+
+  const handleStartMatch = useCallback(() => {
+    if (!selectedMode || !selectedGame || !user) return;
+    socketService.connect(accessToken ?? undefined);
     setIsSearching(true);
-    // TODO: Socket.IO match:request 전송
-    setTimeout(() => setIsSearching(false), 5000); // mock timeout
-  };
+    socketService.requestMatch({
+      userId: user.id,
+      gameType: selectedGame,
+      mode: selectedMode,
+      eloRating: user.eloRating,
+    });
+  }, [selectedMode, selectedGame, user, accessToken]);
+
+  const handleCancelMatch = useCallback(() => {
+    socketService.cancelMatch();
+    setIsSearching(false);
+  }, []);
 
   return (
     <div className="p-4 space-y-6">
@@ -36,7 +63,7 @@ export default function BattlePage() {
             {MATCH_MODES.find(m => m.key === selectedMode)?.label}
           </p>
           <button
-            onClick={() => setIsSearching(false)}
+            onClick={handleCancelMatch}
             className="bg-white/10 text-white px-8 py-3 rounded-xl font-bold"
           >
             취소
@@ -132,34 +159,42 @@ export default function BattlePage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-bold text-sm">🏠 동네 대항전</p>
-                <p className="text-xs text-gray-400 mt-0.5">역삼동 vs 논현동 (5 vs 5)</p>
+                <p className="text-xs text-gray-400 mt-0.5">{user?.regionName ?? '내 동네'} 팀 (5 vs 5)</p>
               </div>
-              <button className="bg-primary text-white text-xs px-3 py-1.5 rounded-lg font-bold">
-                참가
+              <button
+                onClick={() => navigate('/rankings?tab=battle')}
+                className="bg-primary text-white text-xs px-3 py-1.5 rounded-lg font-bold active:scale-95 transition-transform"
+              >
+                랭킹 보기
               </button>
             </div>
             <div className="flex gap-1 mt-2">
               <div className="flex-1 bg-primary/10 rounded h-2">
                 <div className="bg-primary rounded h-2" style={{ width: '60%' }} />
               </div>
-              <span className="text-xs text-gray-400">3/5명</span>
+              <span className="text-xs text-gray-400">게임으로 기여</span>
             </div>
           </div>
           <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-bold text-sm">🏫 학교 대항전</p>
-                <p className="text-xs text-gray-400 mt-0.5">서울대 vs 연세대 (5 vs 5)</p>
+                <p className="text-xs text-gray-400 mt-0.5">{user?.schoolName ?? '학교 미인증'} 팀 (5 vs 5)</p>
               </div>
-              <button className="bg-primary text-white text-xs px-3 py-1.5 rounded-lg font-bold">
-                참가
+              <button
+                onClick={() => navigate('/profile')}
+                className={`text-xs px-3 py-1.5 rounded-lg font-bold active:scale-95 transition-transform ${
+                  user?.schoolName ? 'bg-primary text-white' : 'bg-gray-200 text-gray-400'
+                }`}
+              >
+                {user?.schoolName ? '랭킹 보기' : '학교 인증'}
               </button>
             </div>
             <div className="flex gap-1 mt-2">
               <div className="flex-1 bg-primary/10 rounded h-2">
                 <div className="bg-primary rounded h-2" style={{ width: '80%' }} />
               </div>
-              <span className="text-xs text-gray-400">4/5명</span>
+              <span className="text-xs text-gray-400">게임으로 기여</span>
             </div>
           </div>
         </div>

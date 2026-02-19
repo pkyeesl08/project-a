@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 
@@ -17,6 +17,11 @@ export default function OnboardingPage() {
   const [verifying, setVerifying] = useState(false);
   const [regionResult, setRegionResult] = useState<{ regionName: string; district: string } | null>(null);
   const [regionError, setRegionError] = useState('');
+  const stepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => { if (stepTimerRef.current) clearTimeout(stepTimerRef.current); };
+  }, []);
 
   const handleVerifyRegion = useCallback(async () => {
     setVerifying(true);
@@ -30,7 +35,7 @@ export default function OnboardingPage() {
         position.coords.longitude,
       );
       setRegionResult({ regionName: result.regionName, district: result.district });
-      setTimeout(() => setStep('done'), 1200);
+      stepTimerRef.current = setTimeout(() => setStep('done'), 1200);
     } catch (err: any) {
       setRegionError(err.message || '위치 확인에 실패했습니다. 나중에 설정에서 변경할 수 있어요.');
     } finally {

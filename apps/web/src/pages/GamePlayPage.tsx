@@ -157,8 +157,12 @@ function ResultView({ config, score, gameType, gameMode, onRetry }: {
   const [sharing, setSharing] = useState(false);
   const [dailyRank, setDailyRank] = useState<{ rank: number; total: number; score: number } | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const submittedRef = useRef(false);
 
   useEffect(() => {
+    if (submittedRef.current) return;
+    submittedRef.current = true;
+
     async function submit() {
       try {
         const metadata: Record<string, unknown> = gameMode === 'daily' ? { subMode: 'daily' } : {};

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 
 interface Neighborhood {
@@ -53,6 +54,7 @@ const MOCK_NEIGHBORHOODS: Neighborhood[] = [
 type SortKey = 'activity' | 'online' | 'score';
 
 export default function MapPage() {
+  const navigate = useNavigate();
   const [neighborhoods, setNeighborhoods] = useState<Neighborhood[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Neighborhood | null>(null);
@@ -218,10 +220,16 @@ export default function MapPage() {
 
           {/* 액션 버튼 */}
           <div className="flex gap-2">
-            <button className="flex-1 bg-accent text-white py-3 rounded-xl font-bold text-sm active:scale-95 transition-transform">
+            <button
+              onClick={() => navigate('/battle')}
+              className="flex-1 bg-accent text-white py-3 rounded-xl font-bold text-sm active:scale-95 transition-transform"
+            >
               ⚔️ 이 동네 도전
             </button>
-            <button className="flex-1 bg-white/10 text-white/70 py-3 rounded-xl font-bold text-sm active:scale-95 transition-transform">
+            <button
+              onClick={() => navigate('/rankings')}
+              className="flex-1 bg-white/10 text-white/70 py-3 rounded-xl font-bold text-sm active:scale-95 transition-transform"
+            >
               🏆 동네 랭킹 보기
             </button>
           </div>

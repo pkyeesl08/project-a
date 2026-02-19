@@ -187,7 +187,11 @@ class ApiClient {
   }
 
   getMyRankings() {
-    return this.request('/rankings/me');
+    return this.request<{ regionRank?: number; nationalRank?: number; totalPlayers?: number }>('/rankings/me');
+  }
+
+  getNationalRanking(limit = 100) {
+    return this.request<Array<{ rank: number; userId: string; nickname: string; eloRating: number; regionName: string }>>(`/rankings/national?limit=${limit}`);
   }
 
   // Map

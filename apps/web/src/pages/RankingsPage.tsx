@@ -1,29 +1,46 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, NeighborhoodBattle, BattleRankEntry } from '../lib/api';
+import { useAuthStore } from '../stores/authStore';
 import { getTier } from '../lib/tier';
 
 const SCOPES = ['동네', '학교', '구/군', '시/도', '전국', '대항전'];
 
-const MOCK_ELO = 1247;
-const MOCK_MY_RANK = 42;
+/* 렌더 간 재생성을 막기 위해 컴포넌트 밖에 선언 */
+const FALLBACK_RANKINGS = Array.from({ length: 20 }, (_, i) => ({
+  rank: i + 1,
+  userId: `mock-${i}`,
+  nickname: `${['빠른', '용감한', '멋진', '강한'][i % 4]}${['호랑이', '독수리', '상어', '용'][i % 4]}${1000 + i}`,
+  eloRating: 1500 - i * 15,
+  regionName: '역삼동',
+}));
 
 export default function RankingsPage() {
   const [activeScope, setActiveScope] = useState(0);
   const [shareMsg, setShareMsg] = useState('');
   const navigate = useNavigate();
 
-  const myTier = getTier(MOCK_ELO);
+  const user = useAuthStore(s => s.user);
+  const myElo = user?.eloRating ?? 0;
+  const myTier = getTier(myElo);
 
-  const mockRankings = Array.from({ length: 20 }, (_, i) => ({
-    rank: i + 1,
-    nickname: `${['빠른', '용감한', '멋진', '강한'][i % 4]}${['호랑이', '독수리', '상어', '용'][i % 4]}${1000 + i}`,
-    elo: 1500 - i * 15,
-    bestGame: ['⏱️', '👆', '⚡', '🎈', '🐹'][i % 5],
-  }));
+  const [myRank, setMyRank] = useState<{ regionRank?: number; nationalRank?: number; totalPlayers?: number } | null>(null);
+  const [rankings, setRankings] = useState(FALLBACK_RANKINGS);
+  const [rankingsLoading, setRankingsLoading] = useState(true);
+
+  useEffect(() => {
+    api.getMyRankings().then(setMyRank).catch(() => {});
+    api.getNationalRanking()
+      .then(data => { if (data.length > 0) setRankings(data); })
+      .catch(() => {})
+      .finally(() => setRankingsLoading(false));
+  }, []);
+
+  const displayRank = myRank?.regionRank ?? myRank?.nationalRank ?? '—';
 
   const handleShare = async () => {
-    const text = `🎮 동겜랭크 역삼동 ${SCOPES[activeScope]} ${MOCK_MY_RANK}위!\nELO: ${MOCK_ELO.toLocaleString()} | ${myTier.emoji} ${myTier.name} 티어\n나도 해보기: https://donggamerank.app`;
+    const regionName = user?.regionName ?? '내 동네';
+    const text = `🎮 동겜랭크 ${regionName} ${SCOPES[activeScope]} ${displayRank}위!\nELO: ${myElo.toLocaleString()} | ${myTier.emoji} ${myTier.name} 티어\n나도 해보기: https://donggamerank.app`;
     if (navigator.share) {
       try { await navigator.share({ title: '동겜랭크', text }); }
       catch { /* 취소 */ }
@@ -72,10 +89,10 @@ export default function RankingsPage() {
           <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 mb-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <span className="text-2xl font-black text-primary">#{MOCK_MY_RANK}</span>
+                <span className="text-2xl font-black text-primary">#{displayRank}</span>
                 <div>
-                  <p className="font-bold text-sm">나</p>
-                  <p className="text-xs text-gray-400">ELO {MOCK_ELO.toLocaleString()}</p>
+                  <p className="font-bold text-sm">{user?.nickname ?? '나'}</p>
+                  <p className="text-xs text-gray-400">ELO {myElo.toLocaleString()}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -93,52 +110,58 @@ export default function RankingsPage() {
             )}
           </div>
 
-          {/* Top 3 */}
-          <div className="flex justify-center gap-4 mb-6">
-            {[1, 0, 2].map((idx) => {
-              const entry = mockRankings[idx];
-              const isFirst = idx === 0;
-              const entryTier = getTier(entry.elo);
-              return (
-                <div key={idx} className={`text-center ${isFirst ? '-mt-4' : 'mt-2'}`}>
-                  <div className={`w-16 h-16 rounded-full bg-gradient-to-br ${
-                    isFirst ? 'from-yellow-400 to-orange-500' : 'from-gray-300 to-gray-400'
-                  } flex items-center justify-center text-2xl shadow-lg mx-auto mb-2`}>
-                    {entry.bestGame}
-                  </div>
-                  <p className="text-xs font-bold">{entry.nickname.slice(0, 6)}</p>
-                  <p className="text-[10px] text-gray-400">{entry.elo}</p>
-                  <p className="text-[10px] text-gray-500">{entryTier.emoji}</p>
-                  <span className="text-lg">
-                    {isFirst ? '🥇' : idx === 1 ? '🥈' : '🥉'}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+          {rankingsLoading ? (
+            <div className="text-center py-12 text-gray-400 text-sm">랭킹 불러오는 중...</div>
+          ) : (
+            <>
+              {/* Top 3 */}
+              <div className="flex justify-center gap-4 mb-6">
+                {[1, 0, 2].map((idx) => {
+                  const entry = rankings[idx];
+                  if (!entry) return null;
+                  const isFirst = idx === 0;
+                  const entryTier = getTier(entry.eloRating);
+                  return (
+                    <div key={idx} className={`text-center ${isFirst ? '-mt-4' : 'mt-2'}`}>
+                      <div className={`w-16 h-16 rounded-full bg-gradient-to-br ${
+                        isFirst ? 'from-yellow-400 to-orange-500' : 'from-gray-300 to-gray-400'
+                      } flex items-center justify-center text-2xl shadow-lg mx-auto mb-2`}>
+                        {entryTier.emoji}
+                      </div>
+                      <p className="text-xs font-bold">{entry.nickname.slice(0, 6)}</p>
+                      <p className="text-[10px] text-gray-400">{entry.eloRating}</p>
+                      <span className="text-lg">
+                        {isFirst ? '🥇' : idx === 1 ? '🥈' : '🥉'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
 
-          {/* Rankings List */}
-          <div className="space-y-2">
-            {mockRankings.slice(3).map((entry) => {
-              const entryTier = getTier(entry.elo);
-              return (
-                <div
-                  key={entry.rank}
-                  className="bg-white rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm border border-gray-100"
-                >
-                  <span className="w-8 text-center font-bold text-gray-400">{entry.rank}</span>
-                  <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-lg">
-                    {entry.bestGame}
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-sm">{entry.nickname}</p>
-                    <p className="text-[10px] text-gray-400">{entryTier.emoji} {entryTier.name}</p>
-                  </div>
-                  <span className="text-sm font-bold text-primary">{entry.elo}</span>
-                </div>
-              );
-            })}
-          </div>
+              {/* Rankings List */}
+              <div className="space-y-2">
+                {rankings.slice(3).map((entry) => {
+                  const entryTier = getTier(entry.eloRating);
+                  return (
+                    <div
+                      key={entry.userId ?? entry.rank}
+                      className="bg-white rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm border border-gray-100"
+                    >
+                      <span className="w-8 text-center font-bold text-gray-400">{entry.rank}</span>
+                      <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-lg">
+                        {entryTier.emoji}
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium text-sm">{entry.nickname}</p>
+                        <p className="text-[10px] text-gray-400">{entryTier.emoji} {entryTier.name}</p>
+                      </div>
+                      <span className="text-sm font-bold text-primary">{entry.eloRating}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </>
       )}
     </div>
@@ -152,7 +175,6 @@ function NeighborhoodBattleView() {
   const [rankings, setRankings] = useState<BattleRankEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Mock 동네 대항전 데이터 (서버 미연결 시 fallback)
   const MOCK_BATTLE: NeighborhoodBattle = {
     id: 'battle-1',
     regionAId: 'region-a',
@@ -175,13 +197,14 @@ function NeighborhoodBattleView() {
   }));
 
   useEffect(() => {
-    // 현재 동네 ID는 유저 정보에서 가져와야 하나 Mock으로 처리
-    api.getCurrentBattle('mock-region-id')
+    // regionId를 넘기지 않으면 서버가 JWT에서 사용자 지역을 자동 판단
+    api.getCurrentBattle()
       .then(b => {
         setBattle(b);
+        if (!b) return null;
         return api.getBattleRankings(b.id);
       })
-      .then(setRankings)
+      .then(r => { if (r) setRankings(r); })
       .catch(() => {
         setBattle(MOCK_BATTLE);
         setRankings(MOCK_RANKINGS);
@@ -205,7 +228,6 @@ function NeighborhoodBattleView() {
   const totalScore = battle.regionAScore + battle.regionBScore;
   const aRatio = totalScore > 0 ? (battle.regionAScore / totalScore) * 100 : 50;
 
-  // 남은 시간 계산
   const endMs = new Date(battle.endAt).getTime() - Date.now();
   const endDays = Math.floor(endMs / (1000 * 60 * 60 * 24));
   const endHours = Math.floor((endMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
@@ -213,7 +235,6 @@ function NeighborhoodBattleView() {
 
   return (
     <div className="space-y-4">
-      {/* 대항전 헤더 */}
       <div className="bg-gradient-to-br from-red-500 to-orange-500 rounded-2xl p-5 text-white">
         <div className="flex items-center justify-between mb-1">
           <p className="text-xs opacity-70">주간 동네 대항전</p>
@@ -232,8 +253,6 @@ function NeighborhoodBattleView() {
             <p className="text-xs opacity-60 mt-0.5">점수</p>
           </div>
         </div>
-
-        {/* 진행도 바 */}
         <div className="mt-4">
           <div className="w-full h-3 bg-white/20 rounded-full overflow-hidden flex">
             <div
@@ -248,7 +267,6 @@ function NeighborhoodBattleView() {
         </div>
       </div>
 
-      {/* 내 기여 안내 */}
       <div className="bg-orange-50 rounded-xl p-4 border border-orange-100">
         <p className="font-bold text-sm text-orange-800">🎮 게임을 하면 동네에 기여해요!</p>
         <p className="text-xs text-orange-600 mt-1">
@@ -256,7 +274,6 @@ function NeighborhoodBattleView() {
         </p>
       </div>
 
-      {/* 기여 랭킹 */}
       <div>
         <h3 className="font-bold text-sm mb-3">🏆 우리 동네 기여 순위</h3>
         {rankings.length === 0 ? (

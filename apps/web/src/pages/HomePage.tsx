@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { GAME_CONFIGS, GameCategory } from '@donggamerank/shared';
 import { api, DailyMission } from '../lib/api';
+import { useAuthStore } from '../stores/authStore';
 import { getTier, getNextTier } from '../lib/tier';
 import DailyBattleBanner from '../components/DailyBattleBanner';
 import DailyGameCard from '../components/DailyGameCard';
@@ -14,26 +15,28 @@ const CATEGORY_LABELS = {
   [GameCategory.PARTY]: { label: '🌟 파티', color: 'bg-game-party' },
 };
 
-const MOCK_ELO = 1247;
-const MOCK_REGION_RANK = 42;
-const MOCK_TOTAL_PLAYERS = 1234;
-
 export default function HomePage() {
   const randomGames = Object.values(GAME_CONFIGS)
     .sort(() => Math.random() - 0.5)
     .slice(0, 4);
 
+  const user = useAuthStore(s => s.user);
+  const myElo = user?.eloRating ?? 0;
+  const myRegionName = user?.regionName ?? '내 동네';
+
   const [missions, setMissions] = useState<DailyMission[]>([]);
   const [claiming, setClaiming] = useState<string | null>(null);
   const [season, setSeason] = useState<{ id: string; name: string } | null>(null);
+  const [myRank, setMyRank] = useState<{ regionRank?: number; totalPlayers?: number } | null>(null);
 
-  const tier = getTier(MOCK_ELO);
-  const nextTier = getNextTier(MOCK_ELO);
+  const tier = getTier(myElo);
+  const nextTier = getNextTier(myElo);
 
-  // 미션 및 시즌 정보 로드
+  // 미션, 시즌, 내 랭킹 로드
   useEffect(() => {
     api.getMissions().then(setMissions).catch(() => {});
     api.getCurrentSeason().then(s => setSeason({ id: s.id, name: s.name })).catch(() => {});
+    api.getMyRankings().then(setMyRank).catch(() => {});
   }, []);
 
   const handleClaimMission = async (mission: DailyMission) => {
@@ -62,16 +65,18 @@ export default function HomePage() {
       <section className="bg-gradient-to-br from-primary to-primary-dark rounded-2xl p-5 text-white shadow-lg">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-sm opacity-80">🏠 역삼동 랭킹</p>
+            <p className="text-sm opacity-80">🏠 {myRegionName} 랭킹</p>
             <div className="flex items-end gap-3 mt-1">
-              <span className="text-4xl font-black">#{MOCK_REGION_RANK}</span>
-              <span className="text-sm opacity-70 pb-1">/ {MOCK_TOTAL_PLAYERS.toLocaleString()}명</span>
+              <span className="text-4xl font-black">#{myRank?.regionRank ?? '—'}</span>
+              {myRank?.totalPlayers != null && (
+                <span className="text-sm opacity-70 pb-1">/ {myRank.totalPlayers.toLocaleString()}명</span>
+              )}
             </div>
           </div>
           <div className="text-right">
             <span className="text-2xl">{tier.emoji}</span>
             <p className="text-sm font-bold">{tier.name}</p>
-            <p className="text-xs opacity-60">ELO {MOCK_ELO.toLocaleString()}</p>
+            <p className="text-xs opacity-60">ELO {myElo.toLocaleString()}</p>
           </div>
         </div>
         {nextTier && (
