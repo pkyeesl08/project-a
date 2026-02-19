@@ -255,4 +255,43 @@ export class GamesService {
   getGameTypes() {
     return Object.values(GAME_CONFIGS);
   }
+
+  /**
+   * 도전 타겟 조회
+   * - targetUserId 없으면 → 요청자 동네 1위 플레이어 자동 선택
+   * - scoreTimeline은 metadata 안에 저장된 [elapsedMs, score][] 배열
+   */
+  async getChallengeTarget(requestingUserId: string, gameType: string, targetUserId?: string) {
+    let resolvedId = targetUserId;
+
+    if (!resolvedId) {
+      const user = await this.usersService.findById(requestingUserId);
+      if (!user?.primaryRegionId) return null;
+
+      const topEntries = await this.rankingsService.getTopN(
+        'region', user.primaryRegionId, gameType, 5,
+      );
+      // 자기 자신은 제외, 없으면 1위
+      const top = topEntries.find(e => e.userId !== requestingUserId) ?? topEntries[0];
+      if (!top) return null;
+      resolvedId = top.userId;
+    }
+
+    if (resolvedId === requestingUserId) return null;
+
+    const best = await this.resultsRepo.findOne({
+      where: { userId: resolvedId, gameType },
+      order: { normalizedScore: 'DESC' },
+      relations: ['user'],
+    });
+    if (!best) return null;
+
+    return {
+      userId: best.userId,
+      nickname: best.user?.nickname ?? '알 수 없음',
+      score: best.score,
+      normalizedScore: best.normalizedScore,
+      scoreTimeline: (best.metadata?.scoreTimeline as [number, number][]) ?? [],
+    };
+  }
 }

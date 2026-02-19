@@ -1,22 +1,52 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { GAME_CONFIGS, GameType, GameConfig } from '@donggamerank/shared';
 import { getGameComponent } from '../games/GameEngine';
 import { api, DailyMission } from '../lib/api';
 
 type Phase = 'ready' | 'countdown' | 'playing' | 'result';
 
+export interface ChallengeTarget {
+  userId: string;
+  nickname: string;
+  score: number;
+  scoreTimeline: [number, number][]; // [elapsedMs, score]
+}
+
+/** 타임라인에서 경과 시간에 해당하는 ghost 점수 보간 */
+function getGhostScore(timeline: [number, number][], elapsedMs: number): number {
+  if (!timeline.length) return 0;
+  let result = 0;
+  for (const [t, s] of timeline) {
+    if (t <= elapsedMs) result = s;
+    else break;
+  }
+  return result;
+}
+
 export default function GamePlayPage() {
   const { gameType } = useParams<{ gameType: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
-  const gameMode = searchParams.get('mode') ?? 'solo'; // 'solo' | 'daily'
+  const gameMode = searchParams.get('mode') ?? 'solo';
   const config = GAME_CONFIGS[gameType as GameType];
 
   const [phase, setPhase] = useState<Phase>('ready');
   const [countdown, setCountdown] = useState(3);
   const [score, setScore] = useState(0);
   const [timeLeft, setTimeLeft] = useState(0);
+
+  // 도전 모드
+  const locationState = location.state as { challengeTarget?: ChallengeTarget } | null;
+  const [challengeTarget, setChallengeTarget] = useState<ChallengeTarget | null>(
+    locationState?.challengeTarget ?? null,
+  );
+  const [ghostScore, setGhostScore] = useState(0);
+
+  // scoreTimeline 기록용
+  const scoreTimelineRef = useRef<[number, number][]>([]);
+  const gameStartTimeRef = useRef(0);
 
   /* ── 게임 타입 유효성 ── */
 
@@ -42,6 +72,8 @@ export default function GamePlayPage() {
     setPhase('countdown');
     setCountdown(3);
     setScore(0);
+    scoreTimelineRef.current = [[0, 0]];
+    gameStartTimeRef.current = 0;
   }, []);
 
   // 카운트다운 3 → 2 → 1 → playing
@@ -50,6 +82,7 @@ export default function GamePlayPage() {
     if (countdown <= 0) {
       setPhase('playing');
       setTimeLeft(config.durationMs);
+      gameStartTimeRef.current = Date.now();
       return;
     }
     const t = setTimeout(() => setCountdown(c => c - 1), 1000);
@@ -64,12 +97,36 @@ export default function GamePlayPage() {
     return () => clearTimeout(t);
   }, [phase, timeLeft]);
 
-  const addScore = useCallback((pts: number) => setScore(s => Math.max(0, s + pts)), []);
-  const overrideScore = useCallback((s: number) => setScore(s), []);
+  // ghost 점수 갱신 (100ms마다 경과 시간에 맞는 타겟 점수 계산)
+  useEffect(() => {
+    if (phase !== 'playing' || !challengeTarget || !challengeTarget.scoreTimeline.length) return;
+    const elapsed = config.durationMs - timeLeft;
+    setGhostScore(getGhostScore(challengeTarget.scoreTimeline, elapsed));
+  }, [timeLeft, phase, challengeTarget, config.durationMs]);
+
+  const addScore = useCallback((pts: number) => {
+    setScore(s => {
+      const next = Math.max(0, s + pts);
+      if (gameStartTimeRef.current) {
+        const elapsed = Date.now() - gameStartTimeRef.current;
+        scoreTimelineRef.current.push([elapsed, next]);
+      }
+      return next;
+    });
+  }, []);
+
+  const overrideScore = useCallback((next: number) => {
+    if (gameStartTimeRef.current) {
+      const elapsed = Date.now() - gameStartTimeRef.current;
+      scoreTimelineRef.current.push([elapsed, next]);
+    }
+    setScore(next);
+  }, []);
 
   /* ── 렌더링 ── */
 
   const progress = timeLeft / config.durationMs;
+  const delta = score - ghostScore;
 
   return (
     <div className="game-fullscreen flex flex-col text-white">
@@ -83,6 +140,16 @@ export default function GamePlayPage() {
       {/* ── Ready ── */}
       {phase === 'ready' && (
         <div className="flex-1 flex flex-col items-center justify-center px-8 animate-slide-up">
+          {/* 도전 배너 */}
+          {challengeTarget && (
+            <div className="bg-yellow-500/20 border border-yellow-500/40 rounded-xl px-5 py-2.5 mb-5 text-center w-full max-w-xs">
+              <p className="text-yellow-300 text-xs font-black mb-0.5">도전 모드</p>
+              <p className="text-white/80 text-sm">
+                <span className="font-bold text-yellow-300">{challengeTarget.nickname}</span>의{' '}
+                기록 <span className="font-bold">{challengeTarget.score}</span>점을 넘어라!
+              </p>
+            </div>
+          )}
           <div className="text-7xl mb-6">{config.icon}</div>
           <h1 className="text-3xl font-black mb-2">{config.name}</h1>
           <p className="text-white/60 text-center mb-1">{config.description}</p>
@@ -90,7 +157,7 @@ export default function GamePlayPage() {
           <button onClick={start}
             className="bg-accent px-14 py-4 rounded-2xl text-xl font-bold shadow-lg
                        active:scale-95 transition-transform">
-            시작하기
+            {challengeTarget ? '⚔️ 도전 시작' : '시작하기'}
           </button>
         </div>
       )}
@@ -99,6 +166,11 @@ export default function GamePlayPage() {
       {phase === 'countdown' && (
         <div className="flex-1 flex flex-col items-center justify-center">
           <p className="text-white/40 text-sm mb-4">{config.name}</p>
+          {challengeTarget && (
+            <p className="text-yellow-300/70 text-xs mb-2">
+              vs {challengeTarget.nickname} ({challengeTarget.score}점)
+            </p>
+          )}
           <div className="animate-bounce-in" key={countdown}>
             <span className="text-9xl font-black">{countdown > 0 ? countdown : 'GO!'}</span>
           </div>
@@ -107,7 +179,7 @@ export default function GamePlayPage() {
 
       {/* ── Playing ── */}
       {phase === 'playing' && (
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col relative">
           {/* 타이머 바 */}
           <div className="w-full h-1.5 bg-white/10">
             <div className={`h-full transition-all duration-100 ${
@@ -121,6 +193,22 @@ export default function GamePlayPage() {
             </span>
             <span className="bg-white/10 rounded-full px-4 py-1 text-2xl font-black">{score}</span>
           </div>
+
+          {/* 고스트 비교 오버레이 */}
+          {challengeTarget && challengeTarget.scoreTimeline.length > 0 && (
+            <div className="flex justify-center px-4 mb-1">
+              <div className={`px-4 py-1.5 rounded-full text-sm font-bold shadow-lg transition-all ${
+                delta >= 0
+                  ? 'bg-green-500/90 text-white'
+                  : 'bg-red-500/90 text-white'
+              }`}>
+                {delta >= 0
+                  ? `${challengeTarget.nickname}보다 +${delta} 앞서는 중!`
+                  : `${challengeTarget.nickname}보다 ${Math.abs(delta)} 뒤처지는 중`}
+              </div>
+            </div>
+          )}
+
           {/* 게임 영역 */}
           <GameComponent
             onScore={addScore}
@@ -138,6 +226,8 @@ export default function GamePlayPage() {
           score={score}
           gameType={gameType!}
           gameMode={gameMode}
+          scoreTimeline={scoreTimelineRef.current}
+          challengeTarget={challengeTarget}
           onRetry={start}
         />
       )}
@@ -147,8 +237,14 @@ export default function GamePlayPage() {
 
 /* ── 결과 화면 서브컴포넌트 ── */
 
-function ResultView({ config, score, gameType, gameMode, onRetry }: {
-  config: GameConfig; score: number; gameType: string; gameMode: string; onRetry: () => void;
+function ResultView({ config, score, gameType, gameMode, scoreTimeline, challengeTarget, onRetry }: {
+  config: GameConfig;
+  score: number;
+  gameType: string;
+  gameMode: string;
+  scoreTimeline: [number, number][];
+  challengeTarget: ChallengeTarget | null;
+  onRetry: () => void;
 }) {
   const navigate = useNavigate();
   const [result, setResult] = useState<any>(null);
@@ -156,8 +252,12 @@ function ResultView({ config, score, gameType, gameMode, onRetry }: {
   const [completedMissions, setCompletedMissions] = useState<string[]>([]);
   const [sharing, setSharing] = useState(false);
   const [dailyRank, setDailyRank] = useState<{ rank: number; total: number; score: number } | null>(null);
+  const [nextChallenge, setNextChallenge] = useState<ChallengeTarget | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const submittedRef = useRef(false);
+
+  // 도전 결과
+  const beatChallenge = challengeTarget !== null && score > challengeTarget.score;
 
   useEffect(() => {
     if (submittedRef.current) return;
@@ -166,7 +266,13 @@ function ResultView({ config, score, gameType, gameMode, onRetry }: {
     async function submit() {
       try {
         const metadata: Record<string, unknown> = gameMode === 'daily' ? { subMode: 'daily' } : {};
-        const data: any = await api.submitResult({ gameType, score, mode: 'solo', metadata });
+        const data: any = await api.submitResult({
+          gameType,
+          score,
+          mode: 'solo',
+          metadata,
+          scoreTimeline,
+        });
         setResult(data);
 
         // 게임 완료 후 현재 동네 배틀에 자동 기여 (백그라운드)
@@ -178,6 +284,11 @@ function ResultView({ config, score, gameType, gameMode, onRetry }: {
         if (gameMode === 'daily') {
           api.getMyDailyRank().then(setDailyRank).catch(() => {});
         }
+
+        // 다음 도전 타겟 — 동네 1위 자동 조회 (도전 모드가 아닐 때도 CTA 표시)
+        api.getChallengeTarget(gameType).then(t => {
+          if (t) setNextChallenge(t);
+        }).catch(() => {});
 
         // 미션 완료 여부 확인
         try {
@@ -227,26 +338,22 @@ function ResultView({ config, score, gameType, gameMode, onRetry }: {
       canvas.width = W;
       canvas.height = H;
 
-      // 배경 그라데이션
       const bg = ctx.createLinearGradient(0, 0, W, H);
       bg.addColorStop(0, '#1a1a2e');
       bg.addColorStop(1, '#16213e');
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, W, H);
 
-      // 상단 강조 띠
       const accentGrad = ctx.createLinearGradient(0, 0, W, 0);
       accentGrad.addColorStop(0, '#7c3aed');
       accentGrad.addColorStop(1, '#4f46e5');
       ctx.fillStyle = accentGrad;
       ctx.fillRect(0, 0, W, 4);
 
-      // 앱명
       ctx.fillStyle = 'rgba(255,255,255,0.4)';
       ctx.font = 'bold 14px sans-serif';
       ctx.fillText('🎮 동겜랭크', 24, 30);
 
-      // 게임 아이콘 + 이름
       ctx.font = '40px sans-serif';
       ctx.fillText(config.icon, 24, 90);
       ctx.fillStyle = 'rgba(255,255,255,0.9)';
@@ -256,7 +363,6 @@ function ResultView({ config, score, gameType, gameMode, onRetry }: {
       ctx.font = '12px sans-serif';
       ctx.fillText(config.description, 80, 92);
 
-      // 점수 (대형)
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 72px sans-serif';
       const scoreStr = String(score);
@@ -266,7 +372,6 @@ function ResultView({ config, score, gameType, gameMode, onRetry }: {
       ctx.font = '12px sans-serif';
       ctx.fillText(config.scoreMetric, W / 2 - ctx.measureText(config.scoreMetric).width / 2, 195);
 
-      // 스탯 3개
       const stats = [
         { label: '동네 랭킹', value: result?.regionRank ? `#${result.regionRank}` : '-' },
         { label: 'ELO', value: `${eloChange >= 0 ? '+' : ''}${eloChange}`, color: eloChange >= 0 ? '#4ade80' : '#f87171' },
@@ -286,7 +391,6 @@ function ResultView({ config, score, gameType, gameMode, onRetry }: {
         ctx.fillText(s.value, x + 8, 250);
       });
 
-      // 캔버스 → Blob → 공유
       canvas.toBlob(async (blob) => {
         if (!blob) return;
         const file = new File([blob], `동겜랭크_${config.name}_${score}.png`, { type: 'image/png' });
@@ -296,7 +400,6 @@ function ResultView({ config, score, gameType, gameMode, onRetry }: {
         } else if (navigator.share) {
           await navigator.share({ title: '동겜랭크 결과 공유', text: shareText });
         } else {
-          // 공유 미지원 → 이미지 다운로드 fallback
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
@@ -311,7 +414,27 @@ function ResultView({ config, score, gameType, gameMode, onRetry }: {
   }, [config, score, result, eloChange]);
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center px-6 animate-slide-up">
+    <div className="flex-1 flex flex-col items-center justify-center px-6 animate-slide-up overflow-y-auto py-6">
+      {/* 도전 결과 배너 */}
+      {challengeTarget && (
+        <div className={`rounded-2xl px-5 py-3 mb-4 text-center w-full max-w-xs border ${
+          beatChallenge
+            ? 'bg-green-500/20 border-green-500/40'
+            : 'bg-red-500/20 border-red-500/40'
+        }`}>
+          <p className={`text-sm font-black mb-0.5 ${beatChallenge ? 'text-green-400' : 'text-red-400'}`}>
+            {beatChallenge ? '🎉 도전 성공!' : '😤 도전 실패'}
+          </p>
+          <p className="text-white/70 text-xs">
+            {challengeTarget.nickname} ({challengeTarget.score}점) vs 나 ({score}점)
+            {' '}
+            <span className={`font-bold ${beatChallenge ? 'text-green-300' : 'text-red-300'}`}>
+              {beatChallenge ? `+${score - challengeTarget.score}` : `${score - challengeTarget.score}`}
+            </span>
+          </p>
+        </div>
+      )}
+
       {/* 미션 완료 배너 */}
       {completedMissions.length > 0 && (
         <div className="bg-green-500/20 border border-green-500/40 rounded-2xl px-5 py-2.5 mb-4 text-center w-full max-w-xs">
@@ -328,7 +451,7 @@ function ResultView({ config, score, gameType, gameMode, onRetry }: {
       <p className="text-white/30 text-xs mb-5">{config.scoreMetric}</p>
 
       {/* 결과 스탯 */}
-      <div className="bg-white/10 rounded-2xl p-5 mb-5 w-full max-w-xs">
+      <div className="bg-white/10 rounded-2xl p-5 mb-4 w-full max-w-xs">
         <div className="grid grid-cols-3 gap-4 text-center">
           <div>
             <p className="text-xs text-white/40">동네 랭킹</p>
@@ -363,6 +486,19 @@ function ResultView({ config, score, gameType, gameMode, onRetry }: {
           <p className="text-3xl font-black text-accent">#{dailyRank.rank}</p>
           <p className="text-white/30 text-xs mt-1">전체 {dailyRank.total}명 중</p>
         </div>
+      )}
+
+      {/* 도전하기 CTA — 동네 1위 or 방금 이긴 상대의 다음 타겟 */}
+      {nextChallenge && nextChallenge.userId !== challengeTarget?.userId && (
+        <button
+          onClick={() => navigate(`/play/${gameType}`, { state: { challengeTarget: nextChallenge } })}
+          className="w-full max-w-xs bg-yellow-500/90 py-3.5 rounded-xl font-bold mb-3
+                     active:scale-95 transition-transform text-gray-900 text-sm flex items-center justify-center gap-2">
+          <span>⚔️</span>
+          <span>
+            {nextChallenge.nickname} ({nextChallenge.score}점) 도전하기
+          </span>
+        </button>
       )}
 
       {/* 행동 버튼 2×2 */}

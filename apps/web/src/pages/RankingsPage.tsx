@@ -3,8 +3,20 @@ import { useNavigate } from 'react-router-dom';
 import { api, NeighborhoodBattle, BattleRankEntry } from '../lib/api';
 import { useAuthStore } from '../stores/authStore';
 import { getTier } from '../lib/tier';
+import { GAME_CONFIGS, GameType } from '@donggamerank/shared';
+import type { ChallengeTarget } from './GamePlayPage';
 
-const SCOPES = ['동네', '학교', '구/군', '시/도', '전국', '대항전'];
+const SCOPES = ['동네', '학교', '구/군', '시/도', '전국', '게임별 도전', '대항전'];
+
+/** 랭킹 진입이 자연스러운 게임들 */
+const CHALLENGE_GAMES: GameType[] = [
+  GameType.SPEED_TAP,
+  GameType.TIMING_HIT,
+  GameType.WHACK_A_MOLE,
+  GameType.MATH_SPEED,
+  GameType.RPS_SPEED,
+  GameType.REVERSE_REACTION,
+];
 
 /* 렌더 간 재생성을 막기 위해 컴포넌트 밖에 선언 */
 const FALLBACK_RANKINGS = Array.from({ length: 20 }, (_, i) => ({
@@ -68,8 +80,10 @@ export default function RankingsPage() {
         ))}
       </div>
 
-      {/* 대항전 탭 */}
+      {/* 게임별 도전 탭 */}
       {activeScope === 5 ? (
+        <GameChallengeView />
+      ) : activeScope === 6 ? (
         <NeighborhoodBattleView />
       ) : (
         <>
@@ -155,7 +169,14 @@ export default function RankingsPage() {
                         <p className="font-medium text-sm">{entry.nickname}</p>
                         <p className="text-[10px] text-gray-400">{entryTier.emoji} {entryTier.name}</p>
                       </div>
-                      <span className="text-sm font-bold text-primary">{entry.eloRating}</span>
+                      <span className="text-sm font-bold text-primary mr-1">{entry.eloRating}</span>
+                      <button
+                        onClick={() => { setActiveScope(5); }}
+                        className="text-xs bg-orange-100 text-orange-600 rounded-full px-2 py-1 font-bold active:scale-95 transition-transform flex-shrink-0"
+                        title="도전하기"
+                      >
+                        ⚔️
+                      </button>
                     </div>
                   );
                 })}
@@ -164,6 +185,105 @@ export default function RankingsPage() {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+/* ── 게임별 도전 뷰 ── */
+
+function GameChallengeView() {
+  const navigate = useNavigate();
+  const [selectedGame, setSelectedGame] = useState<GameType>(GameType.SPEED_TAP);
+  const [challengeTarget, setChallengeTarget] = useState<ChallengeTarget | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [gameRankings, setGameRankings] = useState<{ rank: number; userId: string; nickname?: string; score: number }[]>([]);
+
+  // 선택된 게임의 도전 타겟(동네 1위) 자동 조회
+  useEffect(() => {
+    setLoading(true);
+    setChallengeTarget(null);
+    setGameRankings([]);
+    api.getChallengeTarget(selectedGame)
+      .then(t => { if (t) setChallengeTarget(t); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [selectedGame]);
+
+  const config = GAME_CONFIGS[selectedGame];
+
+  return (
+    <div className="space-y-4">
+      {/* 게임 선택 */}
+      <div>
+        <p className="text-xs text-gray-400 font-medium mb-2">어떤 게임으로 도전할까요?</p>
+        <div className="grid grid-cols-3 gap-2">
+          {CHALLENGE_GAMES.map(g => {
+            const cfg = GAME_CONFIGS[g];
+            return (
+              <button
+                key={g}
+                onClick={() => setSelectedGame(g)}
+                className={`flex flex-col items-center py-3 rounded-xl border text-center transition-all ${
+                  selectedGame === g
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-gray-200 bg-white text-gray-600'
+                }`}
+              >
+                <span className="text-2xl mb-1">{cfg.icon}</span>
+                <span className="text-[10px] font-medium leading-tight">{cfg.name}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 동네 1위 도전 카드 */}
+      {loading ? (
+        <div className="text-center py-8 text-gray-400 text-sm">불러오는 중...</div>
+      ) : challengeTarget ? (
+        <div className="bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl p-5 text-white">
+          <p className="text-xs opacity-70 mb-1">동네 1위</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-2xl font-black">{challengeTarget.nickname}</p>
+              <p className="text-4xl font-black mt-1">{challengeTarget.score}</p>
+              <p className="text-xs opacity-60 mt-0.5">{config.scoreMetric}</p>
+            </div>
+            <div className="text-5xl opacity-80">🏆</div>
+          </div>
+          <button
+            onClick={() => navigate(`/play/${selectedGame}`, { state: { challengeTarget } })}
+            className="w-full mt-4 bg-white text-orange-600 font-black py-3 rounded-xl
+                       active:scale-95 transition-transform text-sm">
+            ⚔️ {challengeTarget.nickname} 기록에 도전!
+          </button>
+          {challengeTarget.scoreTimeline.length === 0 && (
+            <p className="text-center text-xs opacity-50 mt-2">
+              * 첫 플레이라 실시간 비교는 다음 판부터 가능해요
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="bg-gray-50 rounded-2xl p-8 text-center">
+          <p className="text-4xl mb-3">{config.icon}</p>
+          <p className="font-bold text-gray-600 text-sm mb-1">아직 기록이 없어요</p>
+          <p className="text-gray-400 text-xs mb-4">이 게임의 첫 기록 보유자가 되어보세요!</p>
+          <button
+            onClick={() => navigate(`/play/${selectedGame}`)}
+            className="bg-primary text-white px-6 py-2.5 rounded-xl font-bold text-sm active:scale-95 transition-transform">
+            {config.icon} 먼저 플레이하기
+          </button>
+        </div>
+      )}
+
+      {/* 도전 방법 안내 */}
+      <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
+        <p className="font-bold text-sm text-blue-800">💡 도전 모드란?</p>
+        <p className="text-xs text-blue-600 mt-1">
+          상대방의 점수 기록이 실시간으로 보여요. 플레이 중 "앞서는 중 / 뒤처지는 중"이 표시되니
+          더 짜릿하게 경쟁할 수 있어요!
+        </p>
+      </div>
     </div>
   );
 }

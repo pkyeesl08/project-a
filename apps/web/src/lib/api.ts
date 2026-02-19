@@ -165,8 +165,37 @@ class ApiClient {
   }
 
   // Games
-  submitResult(data: { gameType: string; score: number; mode: string; opponentId?: string; matchId?: string; metadata?: Record<string, unknown> }) {
-    return this.request('/games/result', { method: 'POST', body: JSON.stringify(data) });
+  submitResult(data: {
+    gameType: string;
+    score: number;
+    mode: string;
+    opponentId?: string;
+    matchId?: string;
+    metadata?: Record<string, unknown>;
+    /** 플레이 중 기록된 [경과ms, 점수] 타임라인 — 도전 기능에서 ghost 재생에 사용 */
+    scoreTimeline?: [number, number][];
+  }) {
+    const { scoreTimeline, ...rest } = data;
+    const payload = {
+      ...rest,
+      metadata: { ...(rest.metadata ?? {}), ...(scoreTimeline ? { scoreTimeline } : {}) },
+    };
+    return this.request('/games/result', { method: 'POST', body: JSON.stringify(payload) });
+  }
+
+  /**
+   * 도전 타겟 조회
+   * - targetUserId 없으면 내 동네 1위 자동 선택
+   */
+  getChallengeTarget(gameType: string, targetUserId?: string) {
+    const q = targetUserId ? `&userId=${targetUserId}` : '';
+    return this.request<{
+      userId: string;
+      nickname: string;
+      score: number;
+      normalizedScore: number;
+      scoreTimeline: [number, number][];
+    } | null>(`/games/challenge-target?gameType=${encodeURIComponent(gameType)}${q}`);
   }
 
   getGameHistory(limit = 20, offset = 0) {

@@ -63,4 +63,15 @@ export class GamesController {
   ) {
     return ok(await this.dailyGameService.getMyDailyRank(userId, regionId));
   }
+
+  /** 도전 타겟 조회 — userId 없으면 동네 1위 자동 반환 */
+  @Get('challenge-target')
+  @UseGuards(JwtAuthGuard)
+  async getChallengeTarget(
+    @CurrentUserId() userId: string,
+    @Query('gameType') gameType: string,
+    @Query('userId') targetUserId?: string,
+  ) {
+    return ok(await this.gamesService.getChallengeTarget(userId, gameType, targetUserId));
+  }
 }
