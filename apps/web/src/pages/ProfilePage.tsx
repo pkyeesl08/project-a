@@ -6,18 +6,6 @@ import { useAvatarStore, FRAME_RING, TITLE_STYLE } from '../stores/avatarStore';
 import { useAuthStore } from '../stores/authStore';
 import { getTier } from '../lib/tier';
 
-const MOCK_ACHIEVEMENTS: AchievementItem[] = [
-  { type: 'FIRST_BLOOD', title: '첫 게임', description: '첫 게임 완료', icon: '🎮', rewardElo: 5, isUnlocked: true },
-  { type: 'VETERAN_100', title: '백전노장', description: '총 100게임', icon: '🏅', rewardElo: 30, isUnlocked: true },
-  { type: 'SPEED_DEMON', title: '스피드 악마', description: '스피드 탭 50회', icon: '⚡', rewardElo: 20, isUnlocked: false },
-  { type: 'PVP_CHAMPION', title: 'PvP 챔피언', description: 'PvP 10승', icon: '🏆', rewardElo: 50, isUnlocked: false },
-  { type: 'PERFECT_AIM', title: '에임 신', description: '연속 조준 만점', icon: '🎯', rewardElo: 30, isUnlocked: false },
-  { type: 'MEMORY_KING', title: '기억의 왕', description: '역순 기억 5/5', icon: '🧠', rewardElo: 25, isUnlocked: false },
-  { type: 'REGION_TOP10', title: '동네 TOP10', description: '동네 랭킹 10위 이내', icon: '🌟', rewardElo: 30, isUnlocked: false },
-  { type: 'REGION_TOP1', title: '동네 최강자', description: '동네 랭킹 1위', icon: '👑', rewardElo: 100, isUnlocked: false },
-  { type: 'MISSION_STREAK_3', title: '3일 연속', description: '미션 3일 연속 완료', icon: '🔥', rewardElo: 25, isUnlocked: false },
-];
-
 type Tab = 'stats' | 'games' | 'achievements' | 'friends' | 'external';
 
 export default function ProfilePage() {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { GAME_CONFIGS, GameType, GameCategory } from '@donggamerank/shared';
+import { GAME_CONFIGS, GameType } from '@donggamerank/shared';
 import { useAuthStore } from '../stores/authStore';
 import { socketService } from '../lib/socket';
 
