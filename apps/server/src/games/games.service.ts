@@ -11,6 +11,7 @@ import { MissionsService } from '../missions/missions.service';
 import { AchievementsService } from '../achievements/achievements.service';
 import { AvatarService } from '../avatar/avatar.service';
 import { WeeklyChallengeService } from '../weekly-challenge/weekly-challenge.service';
+import { NotificationService } from '../notifications/notification.service';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { normalizeScore, calculateElo, calculateSoloEloAdjustment, GameType, GAME_CONFIGS } from '@donggamerank/shared';
 
@@ -74,6 +75,7 @@ export class GamesService {
     private achievementsService: AchievementsService,
     private avatarService: AvatarService,
     private weeklyChallengeService: WeeklyChallengeService,
+    private notificationService: NotificationService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
 
@@ -153,7 +155,8 @@ export class GamesService {
         : Promise.resolve(),
       // 주간 챌린지 점수 업데이트 (이번 주 게임이 아닐 경우 내부에서 무시)
       this.weeklyChallengeService.updateScore(
-        user.primaryRegionId, userId, data.gameType as GameType, normalized,
+        user.primaryRegionId, userId, user.nickname ?? '알 수 없음',
+        data.gameType as GameType, normalized,
       ),
     ]);
 
@@ -184,6 +187,28 @@ export class GamesService {
     // 코인 지급 (게임 완료 기본 보상)
     const coinReward = COIN_REWARD_SOLO +
       (data.mode === 'pvp' && data.metadata?.won === true ? COIN_REWARD_PVP_WIN : 0);
+
+    // 챌린지 링크를 통해 도전하여 이긴 경우 → 원본 챌린저에게 알림
+    const challengeToken = data.metadata?.challengeToken as string | undefined;
+    if (challengeToken) {
+      this.redis.get(`challenge:link:${challengeToken}`).then(raw => {
+        if (!raw) return;
+        try {
+          const challenge = JSON.parse(raw) as {
+            userId: string; nickname: string; score: number; normalizedScore: number;
+          };
+          if (challenge.userId !== userId && normalized > challenge.normalizedScore) {
+            this.notificationService.notify(challenge.userId, 'notification:challenge_beaten', {
+              type: 'challenge_beaten',
+              challengerNickname: user.nickname ?? '알 수 없음',
+              challengerScore: normalized,
+              gameType: data.gameType,
+              message: `🎉 ${user.nickname ?? '누군가'}님이 당신의 ${data.gameType} 기록(${challenge.score}점)을 ${normalized}점으로 뛰어넘었어요!`,
+            });
+          }
+        } catch { /* JSON 파싱 오류 무시 */ }
+      }).catch(() => {});
+    }
 
     Promise.allSettled([
       this.avatarService.addCoins(userId, coinReward),

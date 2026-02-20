@@ -509,8 +509,10 @@ class ApiClient {
   getWeeklyChallenge() {
     return this.request<{
       challenge: { weekKey: string; gameType: string; startAt: string; endAt: string; remainingMs: number };
-      topN: { rank: number; userId: string; score: number; participantCount: number }[];
+      topN: { rank: number; userId: string; nickname: string; score: number; participantCount: number }[];
+      isFallback: boolean;
       myRank: { rank: number; score: number; total: number } | null;
+      champion: { userId: string; nickname: string } | null;
     }>('/weekly-challenge/current');
   }
 

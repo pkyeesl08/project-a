@@ -108,7 +108,7 @@ export default function ChallengeLinkPage() {
       {/* 도전하기 CTA */}
       <button
         onClick={() => navigate(`/play/${challenge.gameType}`, {
-          state: { challengeTarget },
+          state: { challengeTarget, challengeToken: token },
         })}
         className="w-full max-w-sm bg-yellow-400 text-gray-900 font-black py-4 rounded-2xl
                    text-lg active:scale-95 transition-transform shadow-lg mb-3">

@@ -21,12 +21,19 @@ export class WeeklyChallengeController {
     const user = await this.usersService.findById(userId);
     const regionId = user?.primaryRegionId;
 
-    const [topN, myRank] = await Promise.all([
-      regionId ? this.weeklyService.getTopN(regionId, 10) : Promise.resolve([]),
+    const [topNResult, myRank, champion] = await Promise.all([
+      regionId ? this.weeklyService.getTopN(regionId, 10) : Promise.resolve({ entries: [], isFallback: false }),
       regionId ? this.weeklyService.getUserRank(regionId, userId) : Promise.resolve(null),
+      regionId ? this.weeklyService.getChampion(regionId) : Promise.resolve(null),
     ]);
 
-    return ok({ challenge, topN, myRank });
+    return ok({
+      challenge,
+      topN: topNResult.entries,
+      isFallback: topNResult.isFallback,
+      myRank,
+      champion,
+    });
   }
 
   /** 공개 — 특정 동네의 주간 랭킹 */
@@ -36,7 +43,7 @@ export class WeeklyChallengeController {
     @Query('limit') limit = '50',
   ) {
     const challenge = this.weeklyService.getCurrentChallenge();
-    const topN = await this.weeklyService.getTopN(regionId, +limit);
-    return ok({ challenge, topN });
+    const { entries: topN, isFallback } = await this.weeklyService.getTopN(regionId, +limit);
+    return ok({ challenge, topN, isFallback });
   }
 }

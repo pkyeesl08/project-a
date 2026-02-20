@@ -12,8 +12,10 @@ interface WeeklyData {
     endAt: string;
     remainingMs: number;
   };
-  topN: { rank: number; userId: string; score: number; participantCount: number }[];
+  topN: { rank: number; userId: string; nickname: string; score: number; participantCount: number }[];
+  isFallback: boolean;
   myRank: { rank: number; score: number; total: number } | null;
+  champion: { userId: string; nickname: string } | null;
 }
 
 function formatRemaining(ms: number): string {
@@ -47,13 +49,12 @@ export default function WeeklyChallengeCard() {
 
   if (!data) return null;
 
-  const { challenge, topN, myRank } = data;
+  const { challenge, topN, isFallback, myRank, champion } = data;
   const config = GAME_CONFIGS[challenge.gameType as GameType];
   if (!config) return null;
 
   const top1 = topN[0];
 
-  // 도전 버튼 — top1 유저가 있으면 그 유저의 scoreTimeline으로 도전
   const handleChallenge = async () => {
     try {
       const target = await api.getChallengeTarget(challenge.gameType, top1?.userId);
@@ -71,6 +72,12 @@ export default function WeeklyChallengeCard() {
     } catch {
       navigate(`/play/${challenge.gameType}`);
     }
+  };
+
+  const rankIcon = (rank: number) => {
+    if (rank === 1) return '🥇';
+    if (rank === 2) return '🥈';
+    return '🥉';
   };
 
   return (
@@ -92,6 +99,26 @@ export default function WeeklyChallengeCard() {
             <p className="text-xs opacity-60">{config.durationMs / 1000}초 · {config.scoreMetric}</p>
           </div>
         </div>
+
+        {/* 현재 챔피언 배지 */}
+        {champion && (
+          <div className="bg-yellow-400/20 border border-yellow-400/40 rounded-xl px-3 py-2 mb-3 flex items-center gap-2">
+            <span className="text-lg">👑</span>
+            <div>
+              <p className="text-xs opacity-70">이번 주 챔피언</p>
+              <p className="text-sm font-black text-yellow-300">{champion.nickname}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Cold Start fallback 안내 */}
+        {isFallback && (
+          <div className="bg-white/10 rounded-xl px-3 py-2 mb-3 text-center">
+            <p className="text-xs opacity-60">
+              우리 동네 참가자가 적어 전국 랭킹을 보여드려요 🌏
+            </p>
+          </div>
+        )}
 
         {/* 내 순위 */}
         {myRank ? (
@@ -118,16 +145,17 @@ export default function WeeklyChallengeCard() {
           </div>
         )}
 
-        {/* 미니 리더보드 (top3) */}
+        {/* 미니 리더보드 (top3) — 닉네임 표시 */}
         {topN.length > 0 && (
           <div className="space-y-1.5 mb-4">
             {topN.slice(0, 3).map((entry) => (
               <div key={entry.userId} className="flex items-center gap-2 bg-white/10 rounded-lg px-3 py-1.5">
-                <span className="text-sm w-5 text-center">
-                  {entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : '🥉'}
-                </span>
+                <span className="text-sm w-5 text-center">{rankIcon(entry.rank)}</span>
                 <span className="flex-1 text-sm font-medium opacity-90 truncate">
-                  {entry.userId.slice(0, 8)}...
+                  {entry.nickname}
+                  {entry.rank === 1 && champion?.userId === entry.userId && (
+                    <span className="ml-1 text-xs text-yellow-300">👑</span>
+                  )}
                 </span>
                 <span className="text-sm font-bold">{entry.score}</span>
               </div>

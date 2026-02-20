@@ -3,9 +3,10 @@ import { WeeklyChallengeService } from './weekly-challenge.service';
 import { WeeklyChallengeController } from './weekly-challenge.controller';
 import { RedisModule } from '../redis/redis.module';
 import { UsersModule } from '../users/users.module';
+import { NotificationsModule } from '../notifications/notification.module';
 
 @Module({
-  imports: [RedisModule, UsersModule],
+  imports: [RedisModule, UsersModule, NotificationsModule],
   controllers: [WeeklyChallengeController],
   providers: [WeeklyChallengeService],
   exports: [WeeklyChallengeService],

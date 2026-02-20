@@ -1,11 +1,19 @@
 import { io, Socket } from 'socket.io-client';
+import { useNotificationStore } from '../stores/notificationStore';
 
 type EventCallback = (...args: unknown[]) => void;
+
+/** 서버에서 push되는 알림 이벤트 목록 */
+const NOTIFICATION_EVENTS = [
+  'notification:weekly_champion',
+  'notification:dethroned',
+  'notification:challenge_beaten',
+] as const;
 
 /**
  * Socket.IO 싱글턴 서비스
  * - 연결/해제 시 등록된 리스너 자동 재바인딩
- * - 타입별 편의 메서드 제공
+ * - 알림 이벤트는 자동으로 notificationStore에 저장
  */
 class SocketService {
   private socket: Socket | null = null;
@@ -23,6 +31,18 @@ class SocketService {
 
     this.socket.on('connect', () => console.log('[socket] connected'));
     this.socket.on('disconnect', () => console.log('[socket] disconnected'));
+
+    // 알림 이벤트 자동 등록
+    for (const event of NOTIFICATION_EVENTS) {
+      this.socket.on(event, (payload: { type: string; message: string; [key: string]: unknown }) => {
+        const { message, type, ...rest } = payload;
+        useNotificationStore.getState().addNotification({
+          type,
+          message: message ?? type,
+          payload: rest,
+        });
+      });
+    }
 
     for (const [event, fns] of this.listeners) {
       for (const fn of fns) this.socket.on(event, fn as never);

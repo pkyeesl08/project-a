@@ -38,10 +38,11 @@ export default function GamePlayPage() {
   const [timeLeft, setTimeLeft] = useState(0);
 
   // 도전 모드
-  const locationState = location.state as { challengeTarget?: ChallengeTarget } | null;
+  const locationState = location.state as { challengeTarget?: ChallengeTarget; challengeToken?: string } | null;
   const [challengeTarget, setChallengeTarget] = useState<ChallengeTarget | null>(
     locationState?.challengeTarget ?? null,
   );
+  const challengeToken = locationState?.challengeToken ?? null;
   const [ghostScore, setGhostScore] = useState(0);
 
   // scoreTimeline 기록용
@@ -228,6 +229,7 @@ export default function GamePlayPage() {
           gameMode={gameMode}
           scoreTimeline={scoreTimelineRef.current}
           challengeTarget={challengeTarget}
+          challengeToken={challengeToken}
           onRetry={start}
         />
       )}
@@ -237,13 +239,14 @@ export default function GamePlayPage() {
 
 /* ── 결과 화면 서브컴포넌트 ── */
 
-function ResultView({ config, score, gameType, gameMode, scoreTimeline, challengeTarget, onRetry }: {
+function ResultView({ config, score, gameType, gameMode, scoreTimeline, challengeTarget, challengeToken, onRetry }: {
   config: GameConfig;
   score: number;
   gameType: string;
   gameMode: string;
   scoreTimeline: [number, number][];
   challengeTarget: ChallengeTarget | null;
+  challengeToken: string | null;
   onRetry: () => void;
 }) {
   const navigate = useNavigate();
@@ -268,6 +271,7 @@ function ResultView({ config, score, gameType, gameMode, scoreTimeline, challeng
     async function submit() {
       try {
         const metadata: Record<string, unknown> = gameMode === 'daily' ? { subMode: 'daily' } : {};
+        if (challengeToken) metadata.challengeToken = challengeToken;
         const data: any = await api.submitResult({
           gameType,
           score,

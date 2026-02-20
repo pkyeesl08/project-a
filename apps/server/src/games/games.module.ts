@@ -12,6 +12,7 @@ import { AchievementsModule } from '../achievements/achievements.module';
 import { AvatarModule } from '../avatar/avatar.module';
 import { WeeklyChallengeModule } from '../weekly-challenge/weekly-challenge.module';
 import { RedisModule } from '../redis/redis.module';
+import { NotificationsModule } from '../notifications/notification.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { RedisModule } from '../redis/redis.module';
     AvatarModule,
     WeeklyChallengeModule,
     RedisModule,
+    NotificationsModule,
   ],
   controllers: [GamesController],
   providers: [GamesService, DailyGameService],
