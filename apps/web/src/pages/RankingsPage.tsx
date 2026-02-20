@@ -137,8 +137,14 @@ export default function RankingsPage() {
                   const entryTier = getTier(entry.eloRating);
                   return (
                     <div key={idx} className={`text-center ${isFirst ? '-mt-4' : 'mt-2'}`}>
+                      {/* 1위 챔피언 왕관 */}
+                      {isFirst && (
+                        <div className="text-2xl text-center mb-1 animate-bounce">👑</div>
+                      )}
                       <div className={`w-16 h-16 rounded-full bg-gradient-to-br ${
-                        isFirst ? 'from-yellow-400 to-orange-500' : 'from-gray-300 to-gray-400'
+                        isFirst
+                          ? 'from-yellow-400 to-orange-500 ring-4 ring-amber-300 ring-offset-2 ring-offset-white shadow-amber-300/60'
+                          : 'from-gray-300 to-gray-400'
                       } flex items-center justify-center text-2xl shadow-lg mx-auto mb-2`}>
                         {entryTier.emoji}
                       </div>

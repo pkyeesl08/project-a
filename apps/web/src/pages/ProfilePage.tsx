@@ -6,7 +6,7 @@ import { useAvatarStore, FRAME_RING, TITLE_STYLE } from '../stores/avatarStore';
 import { useAuthStore } from '../stores/authStore';
 import { getTier } from '../lib/tier';
 
-type Tab = 'stats' | 'games' | 'achievements' | 'friends' | 'external';
+type Tab = 'stats' | 'games' | 'achievements' | 'friends' | 'external' | 'trophy';
 
 export default function ProfilePage() {
   const navigate = useNavigate();
@@ -45,6 +45,7 @@ export default function ProfilePage() {
     { key: 'achievements', label: '🏅 업적' },
     { key: 'friends', label: '👥 친구' },
     { key: 'external', label: '🔗 외부' },
+    { key: 'trophy', label: '🏆 트로피' },
   ];
 
   return (
@@ -173,6 +174,165 @@ export default function ProfilePage() {
       {activeTab === 'achievements' && <AchievementsTab />}
       {activeTab === 'friends' && <FriendsTab />}
       {activeTab === 'external' && <ExternalTab />}
+      {activeTab === 'trophy' && <TrophyCaseTab />}
+    </div>
+  );
+}
+
+/* ── 트로피 케이스 탭 ── */
+
+const STREAK_MILESTONE_REWARDS: { streak: number; items: string[] }[] = [
+  { streak: 1, items: ['동네 챔피언 칭호', '주간 챔피언 왕관', '코인 100개'] },
+  { streak: 2, items: ['챔피언 오라 이펙트', '코인 200개'] },
+  { streak: 4, items: ['전설의 챔피언 칭호', '황금 챔피언 왕관', '코인 300개'] },
+  { streak: 8, items: ['챔피언 불꽃 이펙트', '코인 300개'] },
+];
+
+function TrophyCaseTab() {
+  const [stats, setStats] = useState<{
+    streak: number;
+    totalCount: number;
+    history: string[];
+    nextReward: string | null;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.getMyChampionStats()
+      .then(setStats)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="py-8 flex flex-col items-center gap-2 text-gray-400">
+        <p className="text-3xl animate-bounce">🏆</p>
+        <p className="text-sm">불러오는 중...</p>
+      </div>
+    );
+  }
+
+  const streak     = stats?.streak ?? 0;
+  const total      = stats?.totalCount ?? 0;
+  const history    = stats?.history ?? [];
+  const nextReward = stats?.nextReward ?? null;
+
+  // 스트릭 진행 바 — 다음 마일스톤까지
+  const milestones = [1, 2, 4, 8];
+  const nextMilestone = milestones.find(m => m > streak) ?? 8;
+  const prevMilestone = [...milestones].reverse().find(m => m <= streak) ?? 0;
+  const progressPct = nextMilestone === prevMilestone
+    ? 100
+    : Math.min(100, ((streak - prevMilestone) / (nextMilestone - prevMilestone)) * 100);
+
+  return (
+    <div className="space-y-4">
+
+      {/* 총 챔피언 통계 */}
+      <div className="bg-gradient-to-br from-amber-400 to-orange-500 rounded-2xl p-5 text-white shadow-lg">
+        <p className="text-xs opacity-80 mb-1">주간 동네 챔피언 기록</p>
+        <div className="flex items-end gap-4">
+          <div>
+            <p className="text-5xl font-black">{total}</p>
+            <p className="text-xs opacity-70">통산 챔피언 횟수</p>
+          </div>
+          <div className="ml-auto text-right">
+            <p className="text-3xl font-black">{streak}🔥</p>
+            <p className="text-xs opacity-70">현재 연속 챔피언</p>
+          </div>
+        </div>
+
+        {/* 스트릭 진행 바 */}
+        {total > 0 && (
+          <div className="mt-4">
+            <div className="flex justify-between text-[10px] opacity-70 mb-1">
+              <span>현재 연속 {streak}주</span>
+              <span>다음 마일스톤: {nextMilestone}주</span>
+            </div>
+            <div className="w-full bg-white/20 rounded-full h-2">
+              <div
+                className="bg-white rounded-full h-2 transition-all"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 다음 보상 안내 */}
+      {nextReward && (
+        <div className="bg-violet-50 border border-violet-200 rounded-xl p-4 flex items-center gap-3">
+          <span className="text-2xl shrink-0">🎁</span>
+          <div>
+            <p className="text-xs font-bold text-violet-700">다음 보상</p>
+            <p className="text-xs text-violet-600 mt-0.5">{nextReward}</p>
+          </div>
+        </div>
+      )}
+
+      {/* 스트릭 마일스톤 로드맵 */}
+      <section>
+        <h3 className="text-sm font-black mb-2 text-gray-700">연속 챔피언 보상 로드맵</h3>
+        <div className="space-y-2">
+          {STREAK_MILESTONE_REWARDS.map(({ streak: ms, items }) => {
+            const achieved = streak >= ms;
+            return (
+              <div
+                key={ms}
+                className={`rounded-xl p-3 flex items-center gap-3 ${
+                  achieved
+                    ? 'bg-amber-50 border border-amber-200'
+                    : 'bg-gray-50 border border-gray-100'
+                }`}
+              >
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg shrink-0 ${
+                  achieved ? 'bg-amber-400 text-white' : 'bg-gray-200 text-gray-400'
+                }`}>
+                  {achieved ? '✅' : `${ms}주`}
+                </div>
+                <div>
+                  <p className={`text-xs font-bold ${achieved ? 'text-amber-700' : 'text-gray-500'}`}>
+                    {ms}주 연속 달성
+                  </p>
+                  <p className={`text-[11px] mt-0.5 ${achieved ? 'text-amber-600' : 'text-gray-400'}`}>
+                    {items.join(' · ')}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* 달성 역사 타임라인 */}
+      {history.length > 0 ? (
+        <section>
+          <h3 className="text-sm font-black mb-2 text-gray-700">챔피언 달성 기록</h3>
+          <div className="grid grid-cols-2 gap-2">
+            {history.map((weekKey, i) => (
+              <div
+                key={`${weekKey}-${i}`}
+                className="bg-white border border-amber-100 rounded-xl px-3 py-2 flex items-center gap-2"
+              >
+                <span className="text-base">{i === 0 ? '🏆' : '👑'}</span>
+                <div>
+                  <p className="text-xs font-bold text-gray-700">{weekKey}</p>
+                  <p className="text-[10px] text-gray-400">동네 1위</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : (
+        total === 0 && (
+          <div className="text-center py-8">
+            <p className="text-4xl mb-3">👑</p>
+            <p className="font-bold text-gray-700 mb-1">아직 챔피언 기록이 없어요</p>
+            <p className="text-sm text-gray-400">주간 동네 챌린지에서 1위를 달성해보세요!</p>
+          </div>
+        )
+      )}
     </div>
   );
 }

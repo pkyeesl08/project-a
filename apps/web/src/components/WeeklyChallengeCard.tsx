@@ -26,16 +26,23 @@ function formatRemaining(ms: number): string {
   return `${hours}시간 남음`;
 }
 
+interface ChampStats {
+  streak: number;
+  totalCount: number;
+  nextReward: string | null;
+}
+
 export default function WeeklyChallengeCard() {
   const navigate = useNavigate();
   const [data, setData] = useState<WeeklyData | null>(null);
+  const [champStats, setChampStats] = useState<ChampStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.getWeeklyChallenge()
-      .then(setData)
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    Promise.allSettled([
+      api.getWeeklyChallenge().then(setData),
+      api.getMyChampionStats().then(s => setChampStats(s)),
+    ]).finally(() => setLoading(false));
   }, []);
 
   if (loading) {
@@ -111,6 +118,25 @@ export default function WeeklyChallengeCard() {
           </div>
         )}
 
+        {/* 연속 챔피언 스트릭 배너 */}
+        {champStats && champStats.streak > 0 && (
+          <div className="bg-amber-400/20 border border-amber-400/40 rounded-xl px-3 py-2 mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🔥</span>
+              <div>
+                <p className="text-xs opacity-70">연속 챔피언 중</p>
+                <p className="text-sm font-black text-amber-300">{champStats.streak}주 연속</p>
+              </div>
+            </div>
+            {champStats.nextReward && (
+              <div className="text-right">
+                <p className="text-xs opacity-60">다음 보상까지</p>
+                <p className="text-xs text-amber-200 font-medium max-w-[100px] truncate">{champStats.nextReward}</p>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Cold Start fallback 안내 */}
         {isFallback && (
           <div className="bg-white/10 rounded-xl px-3 py-2 mb-3 text-center">
@@ -160,6 +186,16 @@ export default function WeeklyChallengeCard() {
                 <span className="text-sm font-bold">{entry.score}</span>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* 다음 보상 미리보기 (스트릭 없을 때) */}
+        {champStats && champStats.streak === 0 && champStats.nextReward && (
+          <div className="bg-white/10 rounded-xl px-3 py-2 mb-3 flex items-center gap-2">
+            <span className="text-base">🎁</span>
+            <p className="text-xs opacity-80">
+              1위 달성 시: <span className="text-yellow-300 font-bold">{champStats.nextReward}</span>
+            </p>
           </div>
         )}
 

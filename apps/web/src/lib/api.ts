@@ -516,6 +516,15 @@ class ApiClient {
     }>('/weekly-challenge/current');
   }
 
+  getMyChampionStats() {
+    return this.request<{
+      streak: number;
+      totalCount: number;
+      history: string[];
+      nextReward: string | null;
+    }>('/weekly-challenge/my-champion-stats');
+  }
+
   // ───── 챌린지 링크 (스트리머 공유용) ─────
 
   createChallengeLink(gameType: string) {

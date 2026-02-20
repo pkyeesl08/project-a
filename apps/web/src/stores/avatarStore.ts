@@ -249,11 +249,13 @@ export const ITEM_EMOJI: Record<string, string> = {
   hair_blonde_spike:  '💛',
   hair_rainbow:       '🌈',
   // 모자
-  hat_cap_basic:     '🧢',
-  hat_cap_blue:      '🧢',
-  hat_snapback:      '🧢',
-  hat_crown_gold:    '👑',
-  hat_s1_crown:      '🏆',
+  hat_cap_basic:         '🧢',
+  hat_cap_blue:          '🧢',
+  hat_snapback:          '🧢',
+  hat_crown_gold:        '👑',
+  hat_s1_crown:          '🏆',
+  hat_weekly_crown:      '👑',
+  hat_champ_crown_gold:  '🏆',
   // 눈
   eyes_default:        '👁️',
   eyes_sparkle:        '✨',
@@ -301,18 +303,25 @@ export const ITEM_EMOJI: Record<string, string> = {
   title_legend_start:  '🔱',
   title_goat:          '🐐',
   // 이펙트
-  effect_default:   '',
-  effect_fire_hit:  '🔥',
-  effect_starlight: '⭐',
-  effect_lightning: '⚡',
+  effect_default:      '',
+  effect_fire_hit:     '🔥',
+  effect_starlight:    '⭐',
+  effect_lightning:    '⚡',
+  effect_champ_aura:   '✨',
+  effect_champ_flame:  '🔥',
+  // 칭호 — 챔피언
+  title_weekly_champ:  '🏅',
+  title_champ_legend:  '🏆',
 };
 
 /* ─── 이펙트 애니메이션 클래스 ─── */
 export const EFFECT_ANIM: Record<string, string> = {
-  effect_default:   '',
-  effect_fire_hit:  'animate-pulse',
-  effect_starlight: 'animate-spin',
-  effect_lightning: 'animate-bounce',
+  effect_default:     '',
+  effect_fire_hit:    'animate-pulse',
+  effect_starlight:   'animate-spin',
+  effect_lightning:   'animate-bounce',
+  effect_champ_aura:  'animate-pulse',
+  effect_champ_flame: 'animate-bounce',
 };
 
 /* ─── 칭호 텍스트 스타일 ─── */
@@ -322,6 +331,19 @@ export const TITLE_STYLE: Record<string, string> = {
   title_speed_monster: 'bg-orange-100 text-orange-700',
   title_legend_start:  'bg-amber-100 text-amber-700',
   title_goat:          'bg-gradient-to-r from-purple-500 to-amber-500 text-white',
+  title_weekly_champ:  'bg-gradient-to-r from-violet-500 to-indigo-500 text-white',
+  title_champ_legend:  'bg-gradient-to-r from-amber-400 to-orange-500 text-white shadow-sm',
+};
+
+/**
+ * 아바타 프레임 링 스타일 매핑
+ * 챔피언 칭호·왕관 아이템 assetKey → Tailwind ring 클래스
+ */
+export const FRAME_RING: Record<string, string> = {
+  hat_weekly_crown:      'ring-4 ring-violet-400 ring-offset-1 ring-offset-primary',
+  hat_champ_crown_gold:  'ring-4 ring-amber-400 ring-offset-1 ring-offset-primary shadow-amber-400/50',
+  hat_crown_gold:        'ring-4 ring-amber-400 ring-offset-1 ring-offset-primary',
+  hat_s1_crown:          'ring-4 ring-amber-500 ring-offset-2 ring-offset-primary shadow-lg',
 };
 
 /* ─── 타입 한글 레이블 ─── */

@@ -36,6 +36,14 @@ export class WeeklyChallengeController {
     });
   }
 
+  /** 내 챔피언 통계 — 트로피 케이스 */
+  @Get('my-champion-stats')
+  @UseGuards(JwtAuthGuard)
+  async getMyChampionStats(@CurrentUserId() userId: string) {
+    const stats = await this.weeklyService.getChampionStats(userId);
+    return ok(stats);
+  }
+
   /** 공개 — 특정 동네의 주간 랭킹 */
   @Get('rankings')
   async getRankings(

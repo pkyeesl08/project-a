@@ -555,6 +555,38 @@ export class AvatarService {
       },
 
       // ══════════════════════════════════════════
+      // 주간 챔피언 전용 아이템 (HAT · TITLE · EFFECT)
+      // ══════════════════════════════════════════
+      {
+        name: '주간 챔피언 왕관', type: ItemType.HAT, rarity: ItemRarity.EPIC,
+        assetKey: 'hat_weekly_crown', gemPrice: null, coinPrice: null,
+        description: '이번 주 동네 1위에게만 지급되는 한정 왕관',
+        acquireCondition: '주간 동네 챌린지 1위 달성',
+        isLimited: true, sortOrder: 50,
+      },
+      {
+        name: '황금 챔피언 왕관', type: ItemType.HAT, rarity: ItemRarity.LEGENDARY,
+        assetKey: 'hat_champ_crown_gold', gemPrice: null, coinPrice: null,
+        description: '4주 연속 동네 1위 달성자에게만 지급',
+        acquireCondition: '주간 챔피언 4주 연속 달성',
+        isLimited: true, sortOrder: 51,
+      },
+      {
+        name: '챔피언 오라', type: ItemType.EFFECT, rarity: ItemRarity.EPIC,
+        assetKey: 'effect_champ_aura', gemPrice: null, coinPrice: null,
+        description: '2주 연속 챔피언 달성 시 지급되는 황금 오라 이펙트',
+        acquireCondition: '주간 챔피언 2주 연속 달성',
+        isLimited: false, sortOrder: 30,
+      },
+      {
+        name: '챔피언 불꽃', type: ItemType.EFFECT, rarity: ItemRarity.LEGENDARY,
+        assetKey: 'effect_champ_flame', gemPrice: null, coinPrice: null,
+        description: '8주 연속 챔피언만이 얻는 전설의 불꽃 이펙트',
+        acquireCondition: '주간 챔피언 8주 연속 달성',
+        isLimited: false, sortOrder: 40,
+      },
+
+      // ══════════════════════════════════════════
       // 칭호 (TITLE)
       // ══════════════════════════════════════════
       {
@@ -586,6 +618,20 @@ export class AvatarService {
         assetKey: 'title_goat', gemPrice: null, coinPrice: null,
         description: '동네 랭킹 1위를 차지한 자에게만 부여', acquireCondition: "업적 '동네 전설' 달성",
         isLimited: false, sortOrder: 31,
+      },
+      {
+        name: '동네 챔피언', type: ItemType.TITLE, rarity: ItemRarity.EPIC,
+        assetKey: 'title_weekly_champ', gemPrice: null, coinPrice: null,
+        description: '주간 동네 챌린지 1위 달성 시 지급',
+        acquireCondition: '주간 동네 챌린지 1위 달성',
+        isLimited: false, sortOrder: 35,
+      },
+      {
+        name: '전설의 챔피언', type: ItemType.TITLE, rarity: ItemRarity.LEGENDARY,
+        assetKey: 'title_champ_legend', gemPrice: null, coinPrice: null,
+        description: '4주 연속 동네 1위를 지킨 전설에게',
+        acquireCondition: '주간 챔피언 4주 연속 달성',
+        isLimited: false, sortOrder: 36,
       },
 
       // ══════════════════════════════════════════

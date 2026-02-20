@@ -3,22 +3,25 @@ import Redis from 'ioredis';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { GameType } from '@donggamerank/shared';
 import { NotificationService } from '../notifications/notification.service';
+import { AvatarService } from '../avatar/avatar.service';
+import { AcquireMethod } from '../avatar/avatar-item.entity';
 
 /**
  * 주간 동네 챌린지 서비스
  *
- * - 매주 월요일 자동으로 게임 종류가 바뀜 (ISO 주차 기반 결정적 선택)
- * - 랭킹 키:  weekly:{weekKey}:region:{regionId}  (sorted set)
- * - 전국 키:  weekly:{weekKey}:national           (Cold Start fallback용)
- * - 닉네임 키: weekly:{weekKey}:nicknames         (hash: userId → nickname)
- * - 챔피언 키: weekly:{weekKey}:champ:{regionId}  (string: userId)
- * - 참가 키:  weekly:{weekKey}:participants:{regionId} (set)
+ * Redis 키 목록:
+ * - weekly:{weekKey}:region:{regionId}       sorted set — 동네 점수
+ * - weekly:{weekKey}:national                sorted set — 전국 점수 (Cold Start fallback)
+ * - weekly:{weekKey}:nicknames               hash       — userId → nickname
+ * - weekly:{weekKey}:champ:{regionId}        string     — 현재 챔피언 userId
+ * - weekly:{weekKey}:participants:{regionId} set        — 참가 유저 집합
+ * - champ:streak:{userId}                    string     — 현재 연속 챔피언 횟수
+ * - champ:total:{userId}                     string     — 통산 챔피언 횟수
+ * - champ:history:{userId}                   list       — 챔피언 달성 weekKey 목록 (최신순)
  */
 
-/** Cold Start 기준: 참가자 5명 미만이면 전국 리더보드 fallback */
 const COLD_START_THRESHOLD = 5;
 
-/** 주간 챌린지 게임 풀 (8개 게임 주기 순환) */
 const WEEKLY_GAME_POOL: GameType[] = [
   GameType.SPEED_TAP,
   GameType.TIMING_HIT,
@@ -63,7 +66,6 @@ export interface WeeklyChallengeInfo {
   gameType: GameType;
   startAt: string;
   endAt: string;
-  /** 남은 시간 ms */
   remainingMs: number;
 }
 
@@ -75,17 +77,50 @@ export interface WeeklyRankEntry {
   participantCount: number;
 }
 
+export interface ChampionStats {
+  streak: number;
+  totalCount: number;
+  history: string[];          // weekKey 목록 (최신 20개)
+  nextReward: string | null;  // 다음 스트릭 보상 설명
+}
+
+/**
+ * 연속 챔피언 달성 시 지급 보상 정의
+ * streak: 해당 연속 주수가 됐을 때 지급
+ */
+const STREAK_REWARDS: {
+  streak: number;
+  assetKey: string;
+  name: string;
+}[] = [
+  { streak: 1, assetKey: 'title_weekly_champ',  name: '동네 챔피언 칭호' },
+  { streak: 1, assetKey: 'hat_weekly_crown',    name: '주간 챔피언 왕관' },
+  { streak: 2, assetKey: 'effect_champ_aura',   name: '챔피언 오라 이펙트' },
+  { streak: 4, assetKey: 'title_champ_legend',  name: '전설의 챔피언 칭호' },
+  { streak: 4, assetKey: 'hat_champ_crown_gold', name: '황금 챔피언 왕관' },
+  { streak: 8, assetKey: 'effect_champ_flame',  name: '챔피언 불꽃 이펙트' },
+];
+
+/** 다음 스트릭 보상 안내 문자열 */
+function getNextStreakReward(currentStreak: number): string | null {
+  const milestones = [1, 2, 4, 8];
+  const next = milestones.find(n => n > currentStreak);
+  if (!next) return null;
+  const items = STREAK_REWARDS.filter(r => r.streak === next);
+  return `${next}주 연속 달성 시: ${items.map(i => i.name).join(' + ')} 지급`;
+}
+
 @Injectable()
 export class WeeklyChallengeService {
   constructor(
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly notificationService: NotificationService,
+    private readonly avatarService: AvatarService,
   ) {}
 
-  /** 현재 주간 챌린지 정보 반환 */
   getCurrentChallenge(): WeeklyChallengeInfo {
-    const weekKey = getWeekKey();
-    const weekNo  = getISOWeekNumber();
+    const weekKey  = getWeekKey();
+    const weekNo   = getISOWeekNumber();
     const gameType = WEEKLY_GAME_POOL[weekNo % WEEKLY_GAME_POOL.length];
     const { startAt, endAt } = getWeekBounds();
     return {
@@ -97,12 +132,6 @@ export class WeeklyChallengeService {
     };
   }
 
-  /**
-   * 게임 결과 제출 시 주간 점수 업데이트 — 최고 기록만 보존
-   * - 닉네임을 Redis hash에 저장 (리더보드 표시용)
-   * - 동네 1위 변경 시 알림 emit (신규 챔피언 & 왕좌 빼앗긴 유저)
-   * - 전국 sorted set에도 병행 업데이트 (Cold Start fallback)
-   */
   async updateScore(
     regionId: string,
     userId: string,
@@ -111,7 +140,7 @@ export class WeeklyChallengeService {
     score: number,
   ) {
     const { weekKey, gameType: weekGame } = this.getCurrentChallenge();
-    if (gameType !== weekGame) return; // 이번 주 게임이 아니면 무시
+    if (gameType !== weekGame) return;
 
     const rankKey  = `weekly:${weekKey}:region:${regionId}`;
     const natKey   = `weekly:${weekKey}:national`;
@@ -121,7 +150,6 @@ export class WeeklyChallengeService {
     const expireAt = Math.floor(new Date(this.getCurrentChallenge().endAt).getTime() / 1000) + 86400 * 8;
 
     try {
-      // 닉네임 저장
       await this.redis.hset(nickKey, userId, nickname);
       await this.redis.expireat(nickKey, expireAt);
 
@@ -132,16 +160,14 @@ export class WeeklyChallengeService {
         await this.redis.zadd(rankKey, score, userId);
         await this.redis.expireat(rankKey, expireAt);
 
-        // 전국 sorted set 업데이트 (Cold Start fallback)
         const natCurrent = await this.redis.zscore(natKey, userId);
         if (natCurrent === null || parseFloat(natCurrent) < score) {
           await this.redis.zadd(natKey, score, userId);
           await this.redis.expireat(natKey, expireAt);
         }
 
-        // 챔피언 변경 감지
         await this.checkAndUpdateChampion(
-          regionId, userId, nickname, score, rankKey, champKey, expireAt,
+          regionId, userId, nickname, score, weekKey, rankKey, champKey, expireAt,
         );
       }
 
@@ -152,54 +178,92 @@ export class WeeklyChallengeService {
     }
   }
 
-  /** 동네 1위 변경 시 알림 처리 */
   private async checkAndUpdateChampion(
     regionId: string,
     userId: string,
     nickname: string,
     score: number,
+    weekKey: string,
     rankKey: string,
     champKey: string,
     expireAt: number,
   ) {
-    // ZADD 직후이므로 현재 #1 확인
     const [top] = await this.redis.zrevrange(rankKey, 0, 0);
-    if (!top || top !== userId) return; // 아직 1위 아님
+    if (!top || top !== userId) return;
 
     const prevChampId = await this.redis.get(champKey);
-    if (prevChampId === userId) return; // 이미 나의 왕좌
+    if (prevChampId === userId) return;
 
-    // 새로운 챔피언 등극
     await this.redis.set(champKey, userId, 'EXAT', expireAt);
 
-    // 신규 챔피언에게 알림
+    /* ── 스트릭 · 기록 갱신 ── */
+    const streakKey  = `champ:streak:${userId}`;
+    const totalKey   = `champ:total:${userId}`;
+    const historyKey = `champ:history:${userId}`;
+
+    // 이전 챔피언 스트릭 리셋
+    if (prevChampId && prevChampId !== userId) {
+      await this.redis.set(`champ:streak:${prevChampId}`, '0');
+    }
+
+    const newStreak = await this.redis.incr(streakKey);
+    await this.redis.incr(totalKey);
+    await this.redis.lpush(historyKey, weekKey);
+    await this.redis.ltrim(historyKey, 0, 49);
+    await this.redis.expire(historyKey, 86400 * 365);
+
+    /* ── 코인 지급 (스트릭에 따라 보너스) ── */
+    const coinReward = newStreak >= 4 ? 300 : newStreak >= 2 ? 200 : 100;
+    await this.avatarService.addCoins(userId, coinReward);
+
+    /* ── 스트릭 기반 아이템 지급 ── */
+    const rewards = STREAK_REWARDS.filter(r => r.streak === newStreak);
+    await Promise.allSettled(
+      rewards.map(r =>
+        this.avatarService.grantItemByKey(userId, r.assetKey, AcquireMethod.EVENT),
+      ),
+    );
+
+    /* ── 챔피언 등극 알림 ── */
+    const rewardNames = [
+      `🪙 코인 ${coinReward}개`,
+      ...rewards.map(r => r.name),
+    ].join(' · ');
+
+    const champMsg =
+      newStreak >= 4
+        ? `🏆 ${newStreak}주 연속 동네 1위! 전설의 챔피언 등극! (${rewardNames})`
+        : newStreak >= 2
+        ? `🏆 ${newStreak}주 연속 동네 1위 달성! (${rewardNames})`
+        : `🏆 이번 주 동네 1위! (${rewardNames})`;
+
     this.notificationService.notify(userId, 'notification:weekly_champion', {
       type: 'weekly_champion',
       regionId,
       score,
-      message: `🏆 이번 주 동네 1위 달성! ${score}점으로 챔피언이 되었어요!`,
+      streak: newStreak,
+      coinReward,
+      rewardNames,
+      message: champMsg,
     });
 
-    // 왕좌를 빼앗긴 기존 챔피언에게 알림
+    /* ── 왕좌 박탈 알림 ── */
     if (prevChampId) {
+      const prevStreak = parseInt(await this.redis.get(`champ:streak:${prevChampId}`) ?? '0') + 1;
       this.notificationService.notify(prevChampId, 'notification:dethroned', {
         type: 'dethroned',
         regionId,
         challengerNickname: nickname,
         challengerScore: score,
-        message: `😤 ${nickname}님이 ${score}점으로 1위를 가져갔어요! 다시 도전하세요!`,
+        lostStreak: prevStreak,
+        message: `😤 ${nickname}님이 ${score}점으로 1위를 가져갔어요! ${prevStreak > 1 ? `${prevStreak}주 연속 기록이 끊겼어요. ` : ''}다시 도전하세요!`,
       });
     }
   }
 
-  /**
-   * 동네 주간 랭킹 상위 N명 조회
-   * - 동네 참가자 < COLD_START_THRESHOLD 이면 전국 fallback
-   */
-  async getTopN(
-    regionId: string,
-    limit = 50,
-  ): Promise<{ entries: WeeklyRankEntry[]; isFallback: boolean }> {
+  /* ── 랭킹 조회 ── */
+
+  async getTopN(regionId: string, limit = 50): Promise<{ entries: WeeklyRankEntry[]; isFallback: boolean }> {
     const { weekKey } = this.getCurrentChallenge();
     const rankKey = `weekly:${weekKey}:region:${regionId}`;
     const natKey  = `weekly:${weekKey}:national`;
@@ -234,7 +298,6 @@ export class WeeklyChallengeService {
     }
   }
 
-  /** 특정 유저의 동네 주간 순위 조회 */
   async getUserRank(regionId: string, userId: string) {
     const { weekKey } = this.getCurrentChallenge();
     const rankKey = `weekly:${weekKey}:region:${regionId}`;
@@ -254,12 +317,10 @@ export class WeeklyChallengeService {
     }
   }
 
-  /** 현재 동네 챔피언 조회 */
   async getChampion(regionId: string): Promise<{ userId: string; nickname: string } | null> {
     const { weekKey } = this.getCurrentChallenge();
     const champKey = `weekly:${weekKey}:champ:${regionId}`;
     const nickKey  = `weekly:${weekKey}:nicknames`;
-
     try {
       const champId = await this.redis.get(champKey);
       if (!champId) return null;
@@ -267,6 +328,26 @@ export class WeeklyChallengeService {
       return { userId: champId, nickname: nickname ?? champId.slice(0, 8) + '...' };
     } catch {
       return null;
+    }
+  }
+
+  /** 내 챔피언 통계 조회 (트로피 케이스용) */
+  async getChampionStats(userId: string): Promise<ChampionStats> {
+    const streakKey  = `champ:streak:${userId}`;
+    const totalKey   = `champ:total:${userId}`;
+    const historyKey = `champ:history:${userId}`;
+
+    try {
+      const [streakRaw, totalRaw, history] = await Promise.all([
+        this.redis.get(streakKey),
+        this.redis.get(totalKey),
+        this.redis.lrange(historyKey, 0, 19),
+      ]);
+      const streak     = parseInt(streakRaw ?? '0');
+      const totalCount = parseInt(totalRaw ?? '0');
+      return { streak, totalCount, history, nextReward: getNextStreakReward(streak) };
+    } catch {
+      return { streak: 0, totalCount: 0, history: [], nextReward: null };
     }
   }
 }
