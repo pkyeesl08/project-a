@@ -253,6 +253,8 @@ function ResultView({ config, score, gameType, gameMode, scoreTimeline, challeng
   const [sharing, setSharing] = useState(false);
   const [dailyRank, setDailyRank] = useState<{ rank: number; total: number; score: number } | null>(null);
   const [nextChallenge, setNextChallenge] = useState<ChallengeTarget | null>(null);
+  const [linkToken, setLinkToken] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const submittedRef = useRef(false);
 
@@ -498,6 +500,33 @@ function ResultView({ config, score, gameType, gameMode, scoreTimeline, challeng
           <span>
             {nextChallenge.nickname} ({nextChallenge.score}점) 도전하기
           </span>
+        </button>
+      )}
+
+      {/* 챌린지 링크 (스트리머 공유용) */}
+      {!linkToken ? (
+        <button
+          onClick={async () => {
+            try {
+              const res = await api.createChallengeLink(gameType);
+              if (res?.token) setLinkToken(res.token);
+            } catch { /* 실패 무시 */ }
+          }}
+          className="w-full max-w-xs bg-purple-600/80 py-3 rounded-xl font-bold mb-3
+                     active:scale-95 transition-transform text-white text-sm flex items-center justify-center gap-2">
+          🔗 내 기록 챌린지 링크 만들기
+        </button>
+      ) : (
+        <button
+          onClick={async () => {
+            const url = `${window.location.origin}/challenge/${linkToken}`;
+            try { await navigator.clipboard.writeText(url); } catch { /* 무시 */ }
+            setLinkCopied(true);
+            setTimeout(() => setLinkCopied(false), 2000);
+          }}
+          className="w-full max-w-xs bg-purple-600/80 py-3 rounded-xl font-bold mb-3
+                     active:scale-95 transition-transform text-white text-sm flex items-center justify-center gap-2">
+          {linkCopied ? '✅ 링크 복사됨!' : '🔗 링크 복사하기'}
         </button>
       )}
 

@@ -1,6 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { v4 as uuidv4 } from 'uuid';
+import Redis from 'ioredis';
 import { GameResultEntity } from './game-result.entity';
 import { UsersService } from '../users/users.service';
 import { RankingsService } from '../rankings/rankings.service';
@@ -8,6 +10,8 @@ import { SeasonsService } from '../seasons/seasons.service';
 import { MissionsService } from '../missions/missions.service';
 import { AchievementsService } from '../achievements/achievements.service';
 import { AvatarService } from '../avatar/avatar.service';
+import { WeeklyChallengeService } from '../weekly-challenge/weekly-challenge.service';
+import { REDIS_CLIENT } from '../redis/redis.module';
 import { normalizeScore, calculateElo, calculateSoloEloAdjustment, GameType, GAME_CONFIGS } from '@donggamerank/shared';
 
 /** 게임별 클라이언트 제출 가능한 최대 raw 점수 — 조작 차단용 */
@@ -69,6 +73,8 @@ export class GamesService {
     private missionsService: MissionsService,
     private achievementsService: AchievementsService,
     private avatarService: AvatarService,
+    private weeklyChallengeService: WeeklyChallengeService,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
 
   async submitResult(userId: string, data: {
@@ -145,6 +151,10 @@ export class GamesService {
       user.schoolId
         ? this.rankingsService.updateScore('school', user.schoolId, data.gameType, userId, normalized)
         : Promise.resolve(),
+      // 주간 챌린지 점수 업데이트 (이번 주 게임이 아닐 경우 내부에서 무시)
+      this.weeklyChallengeService.updateScore(
+        user.primaryRegionId, userId, data.gameType as GameType, normalized,
+      ),
     ]);
 
     // 내 동네 랭킹 조회
@@ -254,6 +264,53 @@ export class GamesService {
 
   getGameTypes() {
     return Object.values(GAME_CONFIGS);
+  }
+
+  /** ── 챌린지 링크 (스트리머 공유용) ── */
+
+  private readonly LINK_TTL = 60 * 60 * 24 * 7; // 7일
+
+  /**
+   * 특정 게임의 내 최고 기록으로 챌린지 링크 생성
+   * Redis key: challenge:link:{token}
+   */
+  async createChallengeLink(userId: string, gameType: string): Promise<string | null> {
+    const best = await this.resultsRepo.findOne({
+      where: { userId, gameType },
+      order: { normalizedScore: 'DESC' },
+      relations: ['user'],
+    });
+    if (!best) return null;
+
+    const token = uuidv4().replace(/-/g, '');
+    const payload = JSON.stringify({
+      userId: best.userId,
+      nickname: best.user?.nickname ?? '알 수 없음',
+      gameType,
+      score: best.score,
+      normalizedScore: best.normalizedScore,
+      scoreTimeline: (best.metadata?.scoreTimeline as [number, number][]) ?? [],
+      createdAt: new Date().toISOString(),
+    });
+
+    await this.redis.set(`challenge:link:${token}`, payload, 'EX', this.LINK_TTL);
+    return token;
+  }
+
+  /** 토큰으로 챌린지 정보 조회 (공개 엔드포인트) */
+  async getChallengeByToken(token: string) {
+    const raw = await this.redis.get(`challenge:link:${token}`);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as {
+        userId: string; nickname: string; gameType: string;
+        score: number; normalizedScore: number;
+        scoreTimeline: [number, number][];
+        createdAt: string;
+      };
+    } catch {
+      return null;
+    }
   }
 
   /**

@@ -503,6 +503,34 @@ class ApiClient {
       `/games/daily/my-rank${q}`,
     );
   }
+
+  // ───── 주간 동네 챌린지 ─────
+
+  getWeeklyChallenge() {
+    return this.request<{
+      challenge: { weekKey: string; gameType: string; startAt: string; endAt: string; remainingMs: number };
+      topN: { rank: number; userId: string; score: number; participantCount: number }[];
+      myRank: { rank: number; score: number; total: number } | null;
+    }>('/weekly-challenge/current');
+  }
+
+  // ───── 챌린지 링크 (스트리머 공유용) ─────
+
+  createChallengeLink(gameType: string) {
+    return this.request<{ token: string; url: string } | null>('/games/challenge-link', {
+      method: 'POST',
+      body: JSON.stringify({ gameType }),
+    });
+  }
+
+  getChallengeByToken(token: string) {
+    return this.request<{
+      userId: string; nickname: string; gameType: string;
+      score: number; normalizedScore: number;
+      scoreTimeline: [number, number][];
+      createdAt: string;
+    } | null>(`/games/challenge-link/${token}`);
+  }
 }
 
 export const api = new ApiClient();

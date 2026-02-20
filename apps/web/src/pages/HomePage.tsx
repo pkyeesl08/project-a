@@ -6,6 +6,7 @@ import { useAuthStore } from '../stores/authStore';
 import { getTier, getNextTier } from '../lib/tier';
 import DailyBattleBanner from '../components/DailyBattleBanner';
 import DailyGameCard from '../components/DailyGameCard';
+import WeeklyChallengeCard from '../components/WeeklyChallengeCard';
 
 const CATEGORY_LABELS = {
   [GameCategory.REACTION]: { label: '⚡ 반응', color: 'bg-game-reaction' },
@@ -200,22 +201,8 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 진행 중인 대회 */}
-      <section>
-        <h2 className="text-lg font-bold mb-3">🏆 진행 중인 대회</h2>
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-bold text-sm">{season?.name ?? 'Season 1'} 주간 챌린지</p>
-              <p className="text-xs text-gray-400 mt-1">스피드 탭 랭킹전</p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs text-accent font-bold">D-3</p>
-              <p className="text-xs text-gray-400">참가자 847명</p>
-            </div>
-          </div>
-        </div>
-      </section>
+      {/* 주간 동네 챌린지 */}
+      <WeeklyChallengeCard />
 
       {/* 카테고리 */}
       <section>

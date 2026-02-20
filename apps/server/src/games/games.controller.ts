@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Query, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Query, Param, Body, UseGuards } from '@nestjs/common';
 import { GamesService } from './games.service';
 import { DailyGameService } from './daily-game.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -73,5 +73,23 @@ export class GamesController {
     @Query('userId') targetUserId?: string,
   ) {
     return ok(await this.gamesService.getChallengeTarget(userId, gameType, targetUserId));
+  }
+
+  /** 챌린지 링크 생성 (스트리머 공유용) */
+  @Post('challenge-link')
+  @UseGuards(JwtAuthGuard)
+  async createChallengeLink(
+    @CurrentUserId() userId: string,
+    @Body('gameType') gameType: string,
+  ) {
+    const token = await this.gamesService.createChallengeLink(userId, gameType);
+    if (!token) return ok(null);
+    return ok({ token, url: `/challenge/${token}` });
+  }
+
+  /** 챌린지 링크 토큰으로 도전 정보 조회 (공개) */
+  @Get('challenge-link/:token')
+  async getChallengeByToken(@Param('token') token: string) {
+    return ok(await this.gamesService.getChallengeByToken(token));
   }
 }

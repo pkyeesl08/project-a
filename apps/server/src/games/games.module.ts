@@ -10,6 +10,8 @@ import { SeasonsModule } from '../seasons/seasons.module';
 import { MissionsModule } from '../missions/missions.module';
 import { AchievementsModule } from '../achievements/achievements.module';
 import { AvatarModule } from '../avatar/avatar.module';
+import { WeeklyChallengeModule } from '../weekly-challenge/weekly-challenge.module';
+import { RedisModule } from '../redis/redis.module';
 
 @Module({
   imports: [
@@ -20,6 +22,8 @@ import { AvatarModule } from '../avatar/avatar.module';
     MissionsModule,
     AchievementsModule,
     AvatarModule,
+    WeeklyChallengeModule,
+    RedisModule,
   ],
   controllers: [GamesController],
   providers: [GamesService, DailyGameService],

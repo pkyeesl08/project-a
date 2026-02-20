@@ -16,6 +16,7 @@ import OnboardingPage from './pages/OnboardingPage';
 import ExternalRankingPage from './pages/ExternalRankingPage';
 import AvatarPage from './pages/AvatarPage';
 import EndlessModePage from './pages/EndlessModePage';
+import ChallengeLinkPage from './pages/ChallengeLinkPage';
 
 /** 로그인이 필요한 라우트 — 미로그인 시 /register로 리다이렉트 */
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -59,6 +60,7 @@ export default function App() {
         <PrivateRoute><AvatarPage /></PrivateRoute>
       } />
       <Route path="/play/:gameType" element={<GamePlayPage />} />
+      <Route path="/challenge/:token" element={<ChallengeLinkPage />} />
       <Route path="/endless" element={<EndlessModePage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/onboarding" element={<OnboardingPage />} />

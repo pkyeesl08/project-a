@@ -18,6 +18,7 @@ import { FriendsModule } from './friends/friends.module';
 import { EventsModule } from './events/events.module';
 import { AvatarModule } from './avatar/avatar.module';
 import { NeighborhoodBattleModule } from './neighborhood-battle/neighborhood-battle.module';
+import { WeeklyChallengeModule } from './weekly-challenge/weekly-challenge.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { NeighborhoodBattleModule } from './neighborhood-battle/neighborhood-bat
     EventsModule,
     AvatarModule,
     NeighborhoodBattleModule,
+    WeeklyChallengeModule,
   ],
 })
 export class AppModule implements NestModule {
