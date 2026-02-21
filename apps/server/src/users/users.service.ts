@@ -65,7 +65,9 @@ export class UsersService {
   }
 
   async updateElo(userId: string, newRating: number): Promise<void> {
-    await this.usersRepo.update(userId, { eloRating: newRating });
+    // ELO 범위 클램프 (0 ~ 10,000)
+    const clampedRating = Math.max(0, Math.min(10000, newRating));
+    await this.usersRepo.update(userId, { eloRating: clampedRating });
   }
 
   /** 미션/어치브먼트 보상용 ELO 가산 */
@@ -87,7 +89,8 @@ export class UsersService {
     if (!user) return { newXp: 0, newLevel: 1, leveledUp: false };
 
     const prevLevel = user.level;
-    const newXp = (user.xp ?? 0) + Math.abs(amount);
+    // XP 상한 적용 (100,000,000)
+    const newXp = Math.min(100_000_000, (user.xp ?? 0) + Math.abs(amount));
     const newLevel = Math.min(100, Math.floor(Math.sqrt(newXp / 50)) + 1);
 
     await this.usersRepo.update(userId, { xp: newXp, level: newLevel });

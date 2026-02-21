@@ -243,14 +243,31 @@ export class AvatarService {
    * ═══════════════════════════════════════════ */
 
   /**
-   * 보석 충전 — 실제 서비스에선 결제 검증 후 호출
-   * receipt: 스토어(Apple/Google) 영수증 검증 토큰
+   * 보석 충전 — Apple/Google IAP 영수증 검증 후 지급
+   * receipt: 스토어 영수증 토큰 (production에서는 반드시 검증)
    */
-  async chargeGems(userId: string, amount: number, _receipt: string) {
-    // TODO: Apple/Google IAP 영수증 검증 로직 삽입
+  async chargeGems(userId: string, amount: number, receipt: string) {
+    // amount 범위 검증: 허용 구매 패키지 (100 / 300 / 500 / 1000 / 3000 / 5000)
+    const ALLOWED_AMOUNTS = new Set([100, 300, 500, 1000, 3000, 5000]);
+    if (!ALLOWED_AMOUNTS.has(amount)) {
+      throw new BadRequestException('허용되지 않는 보석 수량입니다.');
+    }
+
+    // 영수증 기본 검증 — production에서는 Apple/Google 서버 검증 필수
+    if (!receipt || receipt.trim().length < 10) {
+      throw new BadRequestException('유효하지 않은 영수증입니다.');
+    }
+
+    if (process.env.NODE_ENV === 'production') {
+      // Production: Apple/Google IAP 검증 서버 연동 필요
+      // await this.verifyAppleReceipt(receipt, amount);
+      // await this.verifyGoogleReceipt(receipt, amount);
+      throw new BadRequestException('결제 시스템이 준비 중입니다. 관리자에게 문의하세요.');
+    }
+
     await this.usersRepo.increment({ id: userId }, 'gems', amount);
     const user = await this.usersRepo.findOne({ where: { id: userId } });
-    return { gems: (user as any).gems };
+    return { gems: (user?.gems) ?? 0 };
   }
 
   /** 코인 지급 (게임 완료/미션 보상 등 내부용) */

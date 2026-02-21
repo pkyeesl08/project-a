@@ -1,24 +1,39 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { AllExceptionsFilter } from './common/all-exceptions.filter';
 
 async function bootstrap() {
-  // 프로덕션 환경 필수 환경 변수 검증
+  // JWT_SECRET 미설정 시 경고(개발)/에러(프로덕션)
+  if (!process.env.JWT_SECRET) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('[시작 오류] JWT_SECRET 환경 변수가 설정되지 않았습니다.');
+    }
+    console.warn('[경고] JWT_SECRET 미설정 — 개발용 임시값 사용. 프로덕션에서는 절대 사용 금지.');
+  }
+
+  // 프로덕션 필수 환경 변수 검증
   if (process.env.NODE_ENV === 'production') {
     const required = ['JWT_SECRET', 'DB_HOST', 'DB_PASSWORD', 'REDIS_HOST'];
     const missing = required.filter(k => !process.env[k]);
     if (missing.length > 0) {
-      throw new Error(`[시작 오류] 필수 환경 변수가 설정되지 않았습니다: ${missing.join(', ')}`);
+      throw new Error(`[시작 오류] 필수 환경 변수 누락: ${missing.join(', ')}`);
     }
   }
 
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    logger: process.env.NODE_ENV === 'production' ? ['error', 'warn'] : ['log', 'error', 'warn', 'debug'],
+  });
 
   app.setGlobalPrefix('api');
   app.enableCors({
     origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
     credentials: true,
   });
+
+  // 전역 예외 필터 — 프로덕션에서 스택트레이스 차단
+  app.useGlobalFilters(new AllExceptionsFilter());
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

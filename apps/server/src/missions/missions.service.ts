@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { DailyMissionEntity, MissionType, MISSION_DEFINITIONS } from './mission.entity';
@@ -144,8 +144,9 @@ export class MissionsService {
     return 1;
   }
 
-  /** 미션 보상 수령 */
+  /** 미션 보상 수령 — 원자적 UPDATE로 Race Condition 방지 */
   async claimReward(userId: string, missionId: string) {
+    // 1단계: 완료됐지만 아직 미수령인 미션인지 먼저 확인 (읽기만)
     const mission = await this.missionRepo.findOne({
       where: { id: missionId, userId },
     });
@@ -154,8 +155,20 @@ export class MissionsService {
     if (!mission.isCompleted) return { claimed: false, reason: '미션을 완료하지 않았습니다.' };
     if (mission.rewardClaimed) return { claimed: false, reason: '이미 보상을 수령했습니다.' };
 
-    mission.rewardClaimed = true;
-    await this.missionRepo.save(mission);
+    // 2단계: WHERE rewardClaimed = false 조건부 UPDATE — 동시 요청 시 하나만 성공
+    const result = await this.missionRepo
+      .createQueryBuilder()
+      .update()
+      .set({ rewardClaimed: true })
+      .where('id = :id AND "userId" = :userId AND "rewardClaimed" = false AND "isCompleted" = true', {
+        id: missionId,
+        userId,
+      })
+      .execute();
+
+    if (!result.affected || result.affected === 0) {
+      return { claimed: false, reason: '이미 보상을 수령했거나 조건이 맞지 않습니다.' };
+    }
 
     const def = MISSION_DEFINITIONS[mission.missionType];
     await Promise.allSettled([

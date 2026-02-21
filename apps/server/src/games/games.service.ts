@@ -102,6 +102,31 @@ export class GamesService {
     }
     validateRawScore(data.gameType as GameType, data.score);
 
+    // scoreTimeline 검증 — 타임라인 조작 방지
+    if (data.metadata?.scoreTimeline !== undefined) {
+      const timeline = data.metadata.scoreTimeline;
+      if (!Array.isArray(timeline)) {
+        throw new BadRequestException('scoreTimeline 형식이 올바르지 않습니다.');
+      }
+      if (timeline.length > 1000) {
+        throw new BadRequestException('scoreTimeline 항목이 너무 많습니다.');
+      }
+      for (let i = 0; i < timeline.length; i++) {
+        const entry = timeline[i] as unknown;
+        if (!Array.isArray(entry) || entry.length < 2 || typeof entry[0] !== 'number' || typeof entry[1] !== 'number') {
+          throw new BadRequestException('scoreTimeline 항목 형식 오류');
+        }
+        if (i > 0 && (entry[0] as number) <= (timeline[i - 1] as number[])[0]) {
+          throw new BadRequestException('scoreTimeline 시간 순서가 올바르지 않습니다.');
+        }
+        // 타임라인 최대 점수가 제출 점수와 크게 벗어나면 거부
+        const maxAllowed = RAW_SCORE_LIMITS[data.gameType as GameType] ?? Infinity;
+        if ((entry[1] as number) > maxAllowed * 1.05) {
+          throw new BadRequestException('scoreTimeline 점수 범위 초과');
+        }
+      }
+    }
+
     const normalized = normalizeScore(data.gameType as GameType, data.score);
 
     // 최고 기록 체크 — 저장 전 조회

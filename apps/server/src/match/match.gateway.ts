@@ -3,6 +3,7 @@ import {
   OnGatewayConnection, OnGatewayDisconnect, ConnectedSocket, MessageBody,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import { JwtService } from '@nestjs/jwt';
 
 interface QueuedPlayer {
   socketId: string;
@@ -12,6 +13,9 @@ interface QueuedPlayer {
   eloRating: number;
   joinedAt: number;
 }
+
+/** 허용된 게임 액션 화이트리스트 */
+const VALID_GAME_ACTIONS = new Set(['tap', 'swipe', 'hold', 'release', 'score', 'result']);
 
 const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173';
 
@@ -23,12 +27,34 @@ export class MatchGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private matchQueue: QueuedPlayer[] = [];
   private activeMatches = new Map<string, { players: string[]; gameType: string; readyCount: number }>();
 
+  /** 소켓ID → 인증된 userId 매핑 */
+  private socketUserMap = new Map<string, string>();
+
+  constructor(private readonly jwtService: JwtService) {}
+
   handleConnection(client: Socket) {
-    console.log(`[WS] 클라이언트 연결: ${client.id}`);
+    // JWT 토큰 검증 (handshake.auth.token 또는 Authorization 헤더)
+    const token =
+      (client.handshake.auth as Record<string, string>)?.token ??
+      client.handshake.headers.authorization?.replace('Bearer ', '');
+
+    if (!token) {
+      client.emit('auth:error', { message: '인증 토큰이 필요합니다.' });
+      client.disconnect();
+      return;
+    }
+
+    try {
+      const payload = this.jwtService.verify(token) as { sub: string };
+      this.socketUserMap.set(client.id, payload.sub);
+    } catch {
+      client.emit('auth:error', { message: '유효하지 않은 토큰입니다.' });
+      client.disconnect();
+    }
   }
 
   handleDisconnect(client: Socket) {
-    console.log(`[WS] 클라이언트 해제: ${client.id}`);
+    this.socketUserMap.delete(client.id);
     // 큐에서 제거
     this.matchQueue = this.matchQueue.filter(p => p.socketId !== client.id);
     // 진행 중인 매치에서 상대에게 알림
@@ -43,22 +69,32 @@ export class MatchGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('match:request')
   handleMatchRequest(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { userId: string; gameType: string; mode: string; eloRating: number },
+    @MessageBody() data: { gameType: string; mode: string; eloRating: number },
   ) {
-    if (!data?.userId || !data?.gameType || !data?.mode) {
+    // 인증된 userId만 사용 (클라이언트 전달 userId 신뢰하지 않음)
+    const userId = this.socketUserMap.get(client.id);
+    if (!userId) {
+      client.emit('match:error', { message: '인증이 필요합니다.' });
+      return;
+    }
+
+    if (!data?.gameType || !data?.mode) {
       client.emit('match:error', { message: '잘못된 매칭 요청입니다.' });
       return;
     }
 
+    // ELO는 서버에서 검증 (0~10000 범위 클램프)
+    const safeElo = Math.max(0, Math.min(10000, Number(data.eloRating) || 1000));
+
     // 중복 등록 방지: 같은 유저가 이미 큐에 있으면 교체
-    this.matchQueue = this.matchQueue.filter(p => p.userId !== data.userId);
+    this.matchQueue = this.matchQueue.filter(p => p.userId !== userId);
 
     const player: QueuedPlayer = {
       socketId: client.id,
-      userId: data.userId,
+      userId,
       gameType: data.gameType,
       mode: data.mode,
-      eloRating: data.eloRating ?? 1000,
+      eloRating: safeElo,
       joinedAt: Date.now(),
     };
 
@@ -77,10 +113,13 @@ export class MatchGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { matchId: string },
   ) {
-    if (!data?.matchId) return;
+    if (!data?.matchId || typeof data.matchId !== 'string') return;
 
     const match = this.activeMatches.get(data.matchId);
     if (!match) return;
+
+    // 해당 매치의 참가자인지 검증
+    if (!match.players.includes(client.id)) return;
 
     match.readyCount = (match.readyCount ?? 0) + 1;
 
@@ -98,17 +137,25 @@ export class MatchGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('game:action')
   handleGameAction(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { matchId: string; action: string; value: number; timestamp: number },
+    @MessageBody() data: { matchId: string; action: string; value: number },
   ) {
     if (!data?.matchId || !data?.action) return;
 
+    // 액션 화이트리스트 검증
+    if (!VALID_GAME_ACTIONS.has(data.action)) return;
+
+    // 해당 매치의 참가자인지 검증
+    const match = this.activeMatches.get(data.matchId);
+    if (!match || !match.players.includes(client.id)) return;
+
     // value 범위 검증 (0 ~ 999999)
     const safeValue = Math.max(0, Math.min(999999, data.value ?? 0));
+    // timestamp는 클라이언트 값 신뢰 안 함 — 서버 시간 사용
     client.to(data.matchId).emit('game:opponent_action', {
       matchId: data.matchId,
       action: data.action,
       value: safeValue,
-      timestamp: data.timestamp,
+      timestamp: Date.now(),
     });
   }
 
@@ -134,7 +181,6 @@ export class MatchGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const opponentSocket = this.server.sockets.sockets.get(opponent.socketId);
 
     if (!playerSocket || !opponentSocket) {
-      // 소켓이 끊겼으면 매칭 취소
       console.warn(`[WS] 매칭 실패 - 소켓 없음: player=${player.socketId}, opponent=${opponent.socketId}`);
       return;
     }

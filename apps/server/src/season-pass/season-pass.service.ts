@@ -79,19 +79,35 @@ export class SeasonPassService {
     }
   }
 
-  /** 특정 티어 무료/골드 보상 수령 */
+  /** 특정 티어 무료/골드 보상 수령 — PostgreSQL array_append로 Race Condition 방지 */
   async claimTierReward(userId: string, tier: number, track: 'free' | 'gold') {
     const seasonId = await this.seasonsService.getCurrentSeasonId();
     if (!seasonId) throw new BadRequestException('활성 시즌이 없습니다.');
 
-    const pass = await this.getOrCreatePass(userId, seasonId);
     const tierDef = SEASON_PASS_TIERS.find(t => t.tier === tier);
     if (!tierDef) throw new NotFoundException('존재하지 않는 티어입니다.');
+
+    const pass = await this.getOrCreatePass(userId, seasonId);
     if (pass.seasonXp < tierDef.requiredXp) throw new BadRequestException('XP가 부족합니다.');
+    if (track === 'gold' && !pass.hasGoldPass) throw new BadRequestException('골드 패스가 필요합니다.');
 
     const claimedField = track === 'free' ? 'claimedFreeTiers' : 'claimedGoldTiers';
-    if (pass[claimedField].includes(tier)) throw new BadRequestException('이미 수령한 보상입니다.');
-    if (track === 'gold' && !pass.hasGoldPass) throw new BadRequestException('골드 패스가 필요합니다.');
+    const colName = track === 'free' ? '"claimedFreeTiers"' : '"claimedGoldTiers"';
+
+    // 원자적 UPDATE — :tier가 이미 배열에 없는 경우에만 추가 (Race Condition 방지)
+    const result = await this.passRepo
+      .createQueryBuilder()
+      .update()
+      .set({ [claimedField]: () => `array_append(${colName}, ${tier})` })
+      .where(
+        '"userId" = :userId AND "seasonId" = :seasonId AND NOT (:tier = ANY(' + colName + '))',
+        { userId, seasonId, tier },
+      )
+      .execute();
+
+    if (!result.affected || result.affected === 0) {
+      throw new BadRequestException('이미 수령한 보상입니다.');
+    }
 
     const reward = tierDef[track];
 
@@ -104,25 +120,30 @@ export class SeasonPassService {
         : Promise.resolve(),
     ]);
 
-    // 수령 기록
-    pass[claimedField] = [...pass[claimedField], tier];
-    await this.passRepo.save(pass);
-
     return { claimed: true, tier, track, reward };
   }
 
-  /** 골드 패스 구매 (보석 차감) */
+  /** 골드 패스 구매 (보석 차감) — 원자적 처리로 Race Condition 방지 */
   async purchaseGoldPass(userId: string) {
     const seasonId = await this.seasonsService.getCurrentSeasonId();
     if (!seasonId) throw new BadRequestException('활성 시즌이 없습니다.');
 
-    const pass = await this.getOrCreatePass(userId, seasonId);
-    if (pass.hasGoldPass) throw new BadRequestException('이미 골드 패스를 보유하고 있습니다.');
+    await this.getOrCreatePass(userId, seasonId);
 
-    // 보석 차감 (AvatarService purchase 로직 재사용하지 않고 직접 처리)
-    const { DataSource } = await import('typeorm');
-    // 간단히 처리: usersRepo를 통한 gems 차감
-    const result = await this.passRepo.manager
+    // 1단계: hasGoldPass = false인 경우에만 true로 변경 (원자적)
+    const passResult = await this.passRepo
+      .createQueryBuilder()
+      .update()
+      .set({ hasGoldPass: true })
+      .where('"userId" = :userId AND "seasonId" = :seasonId AND "hasGoldPass" = false', { userId, seasonId })
+      .execute();
+
+    if (!passResult.affected || passResult.affected === 0) {
+      throw new BadRequestException('이미 골드 패스를 보유하고 있습니다.');
+    }
+
+    // 2단계: 보석 차감 (잔액 부족 시 패스 구매 롤백)
+    const gemResult = await this.passRepo.manager
       .getRepository('users')
       .createQueryBuilder()
       .update()
@@ -130,12 +151,16 @@ export class SeasonPassService {
       .where('id = :userId AND gems >= :price', { userId, price: GOLD_PASS_GEM_PRICE })
       .execute();
 
-    if (!result.affected || result.affected === 0) {
+    if (!gemResult.affected || gemResult.affected === 0) {
+      // 보석 부족 → 패스 구매 롤백
+      await this.passRepo
+        .createQueryBuilder()
+        .update()
+        .set({ hasGoldPass: false })
+        .where('"userId" = :userId AND "seasonId" = :seasonId', { userId, seasonId })
+        .execute();
       throw new BadRequestException('보석이 부족합니다.');
     }
-
-    pass.hasGoldPass = true;
-    await this.passRepo.save(pass);
 
     return { purchased: true, gemsSpent: GOLD_PASS_GEM_PRICE };
   }

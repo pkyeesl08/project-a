@@ -142,9 +142,20 @@ export class AuthService {
     throw new BadRequestException(`지원하지 않는 소셜 로그인 제공자입니다: ${provider}`);
   }
 
+  /** 외부 API 요청 — 5초 타임아웃 적용 */
+  private async fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    try {
+      return await fetch(url, { ...init, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   /** 카카오 액세스 토큰 검증 */
   private async verifyKakaoToken(accessToken: string): Promise<SocialUser> {
-    const res = await fetch('https://kapi.kakao.com/v2/user/me', {
+    const res = await this.fetchWithTimeout('https://kapi.kakao.com/v2/user/me', {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!res.ok) {
@@ -168,7 +179,7 @@ export class AuthService {
 
   /** 구글 ID 토큰 검증 */
   private async verifyGoogleToken(idToken: string): Promise<SocialUser> {
-    const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
+    const res = await this.fetchWithTimeout(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
     if (!res.ok) {
       throw new UnauthorizedException('구글 토큰이 유효하지 않습니다.');
     }
@@ -195,7 +206,7 @@ export class AuthService {
     }
 
     // Apple 공개키 목록 조회
-    const jwksRes = await fetch('https://appleid.apple.com/auth/keys');
+    const jwksRes = await this.fetchWithTimeout('https://appleid.apple.com/auth/keys');
     if (!jwksRes.ok) {
       throw new UnauthorizedException('Apple 공개키를 가져올 수 없습니다.');
     }
