@@ -22,19 +22,11 @@ export class AttendanceService {
     return d.toISOString().split('T')[0];
   }
 
-  /** 오늘 출석 체크 — 이미 했으면 기존 기록 반환 */
+  /** 오늘 출석 체크 — Race Condition 방지: INSERT ... ON CONFLICT DO NOTHING 사용 */
   async checkIn(userId: string) {
     const today = this.today();
 
-    // 오늘 이미 체크인했으면 현황 반환
-    const existing = await this.attendanceRepo.findOne({
-      where: { userId, checkDate: today },
-    });
-    if (existing) {
-      return { alreadyChecked: true, ...this.formatRecord(existing) };
-    }
-
-    // 어제 체크인 여부로 streak 계산
+    // 어제 체크인 여부로 streak 계산 (INSERT 전에 계산)
     const yesterdayRecord = await this.attendanceRepo.findOne({
       where: { userId, checkDate: this.yesterday() },
     });
@@ -44,23 +36,30 @@ export class AttendanceService {
     const cycleDay = ((newStreak - 1) % 7) + 1; // 1~7 순환
     const rewards = ATTENDANCE_REWARDS[cycleDay];
 
-    // 보상 지급
+    // 원자적 INSERT — (userId, checkDate) 유니크 제약으로 Race Condition 방지
+    // 동시 요청 시 한 번만 삽입되고, 이미 존재하면 orIgnore()로 무시
+    const insertResult = await this.attendanceRepo
+      .createQueryBuilder()
+      .insert()
+      .into('attendance')
+      .values({ userId, checkDate: today, streak: newStreak, cycleDay, rewards })
+      .orIgnore()
+      .execute();
+
+    if (insertResult.identifiers.length === 0) {
+      // 이미 체크인됨 (중복 요청 포함) — 보상 미지급
+      const existing = await this.attendanceRepo.findOne({ where: { userId, checkDate: today } });
+      return { alreadyChecked: true, ...this.formatRecord(existing!) };
+    }
+
+    // 삽입 성공 → 보상 지급 (한 번만 실행됨)
     await Promise.allSettled([
       rewards.coins ? this.avatarService.addCoins(userId, rewards.coins) : Promise.resolve(),
       rewards.gems  ? this.avatarService.addGems(userId, rewards.gems)   : Promise.resolve(),
     ]);
 
-    const record = await this.attendanceRepo.save(
-      this.attendanceRepo.create({
-        userId,
-        checkDate: today,
-        streak: newStreak,
-        cycleDay,
-        rewards,
-      }),
-    );
-
-    return { alreadyChecked: false, ...this.formatRecord(record) };
+    const record = await this.attendanceRepo.findOne({ where: { userId, checkDate: today } });
+    return { alreadyChecked: false, ...this.formatRecord(record!) };
   }
 
   /** 이번 주(월~일) 출석 현황 + 오늘 체크인 여부 */

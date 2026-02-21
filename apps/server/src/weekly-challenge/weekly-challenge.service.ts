@@ -201,8 +201,10 @@ export class WeeklyChallengeService {
     const totalKey   = `champ:total:${userId}`;
     const historyKey = `champ:history:${userId}`;
 
-    // 이전 챔피언 스트릭 리셋
+    // 이전 챔피언 스트릭 — 리셋 전에 값을 먼저 읽어야 알림에서 정확한 횟수 표시 가능
+    let prevChampStreak = 0;
     if (prevChampId && prevChampId !== userId) {
+      prevChampStreak = parseInt(await this.redis.get(`champ:streak:${prevChampId}`) ?? '0');
       await this.redis.set(`champ:streak:${prevChampId}`, '0');
     }
 
@@ -248,15 +250,14 @@ export class WeeklyChallengeService {
     });
 
     /* ── 왕좌 박탈 알림 ── */
-    if (prevChampId) {
-      const prevStreak = parseInt(await this.redis.get(`champ:streak:${prevChampId}`) ?? '0') + 1;
+    if (prevChampId && prevChampId !== userId) {
       this.notificationService.notify(prevChampId, 'notification:dethroned', {
         type: 'dethroned',
         regionId,
         challengerNickname: nickname,
         challengerScore: score,
-        lostStreak: prevStreak,
-        message: `😤 ${nickname}님이 ${score}점으로 1위를 가져갔어요! ${prevStreak > 1 ? `${prevStreak}주 연속 기록이 끊겼어요. ` : ''}다시 도전하세요!`,
+        lostStreak: prevChampStreak,
+        message: `😤 ${nickname}님이 ${score}점으로 1위를 가져갔어요! ${prevChampStreak > 1 ? `${prevChampStreak}주 연속 기록이 끊겼어요. ` : ''}다시 도전하세요!`,
       });
     }
   }

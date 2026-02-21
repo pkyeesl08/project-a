@@ -50,15 +50,22 @@ export class UsersService {
   }
 
   async updateProfile(userId: string, data: Partial<UserEntity>): Promise<UserEntity> {
+    // 서비스 레벨 화이트리스트 — 허용된 필드만 반영 (eloRating, gems, coins 등 민감 필드 차단)
+    const ALLOWED: Array<keyof UserEntity> = ['nickname', 'isPublic', 'profileImage'];
+    const sanitized: Partial<UserEntity> = {};
+    for (const key of ALLOWED) {
+      if (key in data) sanitized[key] = (data as any)[key];
+    }
+
     // 닉네임 변경 시 중복 체크
-    if (data.nickname) {
-      const available = await this.isNicknameAvailable(data.nickname, userId);
+    if (sanitized.nickname) {
+      const available = await this.isNicknameAvailable(sanitized.nickname, userId);
       if (!available) {
         throw new ConflictException('이미 사용 중인 닉네임입니다.');
       }
     }
 
-    await this.usersRepo.update(userId, data);
+    await this.usersRepo.update(userId, sanitized);
     const user = await this.findById(userId);
     if (!user) throw new NotFoundException('User not found');
     return user;

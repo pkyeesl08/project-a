@@ -7,6 +7,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Inject, OnModuleDestroy } from '@nestjs/common';
 import Redis from 'ioredis';
 import { REDIS_CLIENT } from '../redis/redis.module';
+import { UsersService } from '../users/users.service';
 
 interface QueuedPlayer {
   socketId: string;
@@ -36,14 +37,15 @@ export class MatchGateway implements OnGatewayConnection, OnGatewayDisconnect, O
   private matchQueue: QueuedPlayer[] = [];
   private activeMatches = new Map<string, { players: string[]; gameType: string; readyCount: number }>();
 
-  /** 소켓ID → 인증된 userId 매핑 */
-  private socketUserMap = new Map<string, string>();
+  /** 소켓ID → 인증된 userId + DB 기반 ELO 매핑 */
+  private socketUserMap = new Map<string, { userId: string; eloRating: number }>();
 
   /** 큐 타임아웃 폴링 타이머 핸들 */
   private pruneTimer: ReturnType<typeof setInterval>;
 
   constructor(
     private readonly jwtService: JwtService,
+    private readonly usersService: UsersService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {
     // 5초마다 타임아웃된 큐 플레이어 제거
@@ -86,7 +88,14 @@ export class MatchGateway implements OnGatewayConnection, OnGatewayDisconnect, O
 
     try {
       const payload = this.jwtService.verify(token) as { sub: string };
-      this.socketUserMap.set(client.id, payload.sub);
+      // DB에서 실제 ELO를 로드하여 저장 (클라이언트 전달 값 불신)
+      const user = await this.usersService.findById(payload.sub);
+      if (!user) {
+        client.emit('auth:error', { message: '존재하지 않는 사용자입니다.' });
+        client.disconnect();
+        return;
+      }
+      this.socketUserMap.set(client.id, { userId: payload.sub, eloRating: user.eloRating });
     } catch {
       client.emit('auth:error', { message: '유효하지 않은 토큰입니다.' });
       client.disconnect();
@@ -111,9 +120,9 @@ export class MatchGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { gameType: string; mode: string; eloRating: number },
   ) {
-    // 인증된 userId만 사용 (클라이언트 전달 userId 신뢰하지 않음)
-    const userId = this.socketUserMap.get(client.id);
-    if (!userId) {
+    // 인증된 userId + DB ELO 사용 (클라이언트 전달 값 불신)
+    const userInfo = this.socketUserMap.get(client.id);
+    if (!userInfo) {
       client.emit('match:error', { message: '인증이 필요합니다.' });
       return;
     }
@@ -123,8 +132,7 @@ export class MatchGateway implements OnGatewayConnection, OnGatewayDisconnect, O
       return;
     }
 
-    // ELO는 서버에서 검증 (0~10000 범위 클램프)
-    const safeElo = Math.max(0, Math.min(10000, Number(data.eloRating) || 1000));
+    const { userId, eloRating } = userInfo;
 
     // 중복 등록 방지: 같은 유저가 이미 큐에 있으면 교체
     this.matchQueue = this.matchQueue.filter(p => p.userId !== userId);
@@ -134,7 +142,7 @@ export class MatchGateway implements OnGatewayConnection, OnGatewayDisconnect, O
       userId,
       gameType: data.gameType,
       mode: data.mode,
-      eloRating: safeElo,
+      eloRating,  // DB에서 로드한 실제 ELO 사용
       joinedAt: Date.now(),
     };
 

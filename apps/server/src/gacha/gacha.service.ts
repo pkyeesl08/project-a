@@ -65,19 +65,26 @@ export class GachaService {
   async pull(userId: string, count: 1 | 10) {
     const gemCost = count === 1 ? GACHA_GEM_COST.single : GACHA_GEM_COST.ten;
 
-    // 보석 차감 (원자적)
-    const result = await this.usersRepo
-      .createQueryBuilder()
-      .update()
-      .set({ gems: () => `gems - ${gemCost}` })
-      .where('id = :userId AND gems >= :cost', { userId, cost: gemCost })
-      .execute();
-
-    if (!result.affected || result.affected === 0) {
-      throw new BadRequestException('보석이 부족합니다.');
+    // Redis 세마포어 — 동시 뽑기 요청 차단 (5초 TTL)
+    const lockKey = `gacha:lock:${userId}`;
+    const acquired = await this.redis.set(lockKey, '1', 'NX', 'EX', 5);
+    if (!acquired) {
+      throw new BadRequestException('뽑기가 이미 진행 중입니다. 잠시 후 다시 시도해주세요.');
     }
 
     try {
+      // 보석 차감 (원자적)
+      const deductResult = await this.usersRepo
+        .createQueryBuilder()
+        .update()
+        .set({ gems: () => `gems - ${gemCost}` })
+        .where('id = :userId AND gems >= :cost', { userId, cost: gemCost })
+        .execute();
+
+      if (!deductResult.affected || deductResult.affected === 0) {
+        throw new BadRequestException('보석이 부족합니다.');
+      }
+
       // 현재 소유 아이템 ID 목록
       const owned = await this.inventoryRepo.find({ where: { userId }, select: ['itemId'] });
       const ownedIds = new Set(owned.map(o => o.itemId));
@@ -91,18 +98,22 @@ export class GachaService {
         [ItemRarity.LEGENDARY]: pool.filter(i => i.rarity === ItemRarity.LEGENDARY),
       };
 
-      const results: GachaResult[] = [];
-      for (let i = 0; i < count; i++) {
-        const pullResult = await this.singlePull(userId, ownedIds, poolByRarity);
-        results.push(pullResult);
-        if (pullResult.item) ownedIds.add(pullResult.item.id);
+      try {
+        const results: GachaResult[] = [];
+        for (let i = 0; i < count; i++) {
+          const pullResult = await this.singlePull(userId, ownedIds, poolByRarity);
+          results.push(pullResult);
+          if (pullResult.item) ownedIds.add(pullResult.item.id);
+        }
+        return { results, remaining: await this.getUserGems(userId) };
+      } catch (err) {
+        // 아이템 지급 실패 시 보석 전액 환불
+        await this.avatarService.addGems(userId, gemCost);
+        throw err;
       }
-
-      return { results, remaining: await this.getUserGems(userId) };
-    } catch (err) {
-      // 아이템 지급 실패 시 보석 전액 환불
-      await this.avatarService.addGems(userId, gemCost);
-      throw err;
+    } finally {
+      // 락 해제 (성공/실패 관계없이)
+      await this.redis.del(lockKey);
     }
   }
 

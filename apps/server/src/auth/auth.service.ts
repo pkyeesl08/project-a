@@ -94,11 +94,16 @@ export class AuthService {
 
   async refresh(refreshToken: string) {
     try {
-      const payload = this.jwtService.verify(refreshToken);
+      const payload = this.jwtService.verify(refreshToken) as { sub: string; email: string; exp: number };
       const user = await this.usersService.findById(payload.sub);
       if (!user) throw new UnauthorizedException();
+
+      // 사용된 refresh token을 블랙리스트에 등록 (Rotation — 재사용 방지)
+      await this.logout(refreshToken);
+
       return this.issueTokens(user.id, user.email);
-    } catch {
+    } catch (err) {
+      if (err instanceof UnauthorizedException) throw err;
       throw new UnauthorizedException('리프레시 토큰이 유효하지 않습니다.');
     }
   }
