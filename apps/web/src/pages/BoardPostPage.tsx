@@ -19,6 +19,38 @@ const GAME_LABELS: Record<string, string> = {
   shell_game: '컵 게임', emoji_sort: '이모지 분류', count_more: '더 많이 세기',
 };
 
+type GameCategory = 'reaction' | 'puzzle' | 'action' | 'precision' | 'special';
+
+const GAME_CATEGORY: Record<string, GameCategory> = {
+  timing_hit: 'reaction', speed_tap: 'reaction', lightning_reaction: 'reaction',
+  balloon_pop: 'reaction', whack_a_mole: 'reaction',
+  memory_flash: 'puzzle', color_match: 'puzzle', bigger_number: 'puzzle',
+  same_picture: 'puzzle', odd_even: 'puzzle', reverse_memory: 'puzzle',
+  direction_swipe: 'action', stop_the_bar: 'action', rps_speed: 'action',
+  sequence_tap: 'action', reverse_reaction: 'action',
+  line_trace: 'precision', target_sniper: 'precision', dark_room_tap: 'precision',
+  screw_center: 'precision', line_grow: 'precision', dual_precision: 'precision',
+  rapid_aim: 'precision',
+  math_speed: 'special', shell_game: 'special', emoji_sort: 'special', count_more: 'special',
+};
+
+const CATEGORY_CONFIG: Record<GameCategory, { icon: string; bg: string; text: string; border: string }> = {
+  reaction:  { icon: '⚡', bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200' },
+  puzzle:    { icon: '🧠', bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' },
+  action:    { icon: '🕹️', bg: 'bg-blue-50',   text: 'text-blue-700',   border: 'border-blue-200'   },
+  precision: { icon: '🎯', bg: 'bg-green-50',  text: 'text-green-700',  border: 'border-green-200'  },
+  special:   { icon: '🌟', bg: 'bg-amber-50',  text: 'text-amber-700',  border: 'border-amber-200'  },
+};
+
+function getGameTag(gameType: string | null | undefined) {
+  if (!gameType) return null;
+  const cat = GAME_CATEGORY[gameType];
+  const label = GAME_LABELS[gameType] ?? gameType;
+  if (!cat) return { icon: '🎮', label, bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' };
+  const c = CATEGORY_CONFIG[cat];
+  return { icon: c.icon, label, bg: c.bg, text: c.text, border: c.border };
+}
+
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
@@ -126,10 +158,11 @@ export default function BoardPostPage() {
 
   if (!post) return null;
 
-  const isParty     = post.category === 'party';
-  const isMine      = me?.id === post.userId;
-  const isJoined    = me ? post.currentPlayers.includes(me.id) : false;
-  const isFull      = post.partyStatus === 'closed';
+  const isParty  = post.category === 'party';
+  const isMine   = me?.id === post.userId;
+  const isJoined = me ? post.currentPlayers.includes(me.id) : false;
+  const isFull   = post.partyStatus === 'closed';
+  const gameTag  = getGameTag(post.gameType);
 
   return (
     <div className="min-h-screen bg-gray-50 pb-32">
@@ -148,37 +181,42 @@ export default function BoardPostPage() {
         <div className="bg-white rounded-2xl p-4 shadow-sm">
           {/* 파티 정보 */}
           {isParty && (
-            <div className="bg-blue-50 rounded-xl p-3 mb-3 flex items-center justify-between">
-              <div>
-                <p className="text-xs text-blue-500 font-medium">
-                  {post.gameType ? GAME_LABELS[post.gameType] ?? post.gameType : '게임 미지정'}
-                </p>
-                <p className="text-sm font-bold text-blue-800 mt-0.5">
-                  {post.currentPlayers.length}/{post.maxPlayers}명 참가
-                  {isFull && <span className="ml-2 text-xs bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded-full">파티 완성</span>}
-                </p>
+            <div className={`rounded-xl p-3 mb-3 border ${gameTag ? `${gameTag.bg} ${gameTag.border}` : 'bg-blue-50 border-blue-200'}`}>
+              <div className="flex items-center justify-between">
+                <div>
+                  {gameTag && (
+                    <span className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full mb-1.5
+                                     ${gameTag.bg} ${gameTag.text} border ${gameTag.border}`}>
+                      {gameTag.icon} {gameTag.label}
+                    </span>
+                  )}
+                  <p className={`text-sm font-bold mt-0.5 ${gameTag ? gameTag.text : 'text-blue-800'}`}>
+                    {post.currentPlayers.length}/{post.maxPlayers}명 참가 중
+                    {isFull && <span className="ml-2 text-xs bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded-full font-medium">파티 완성</span>}
+                  </p>
+                </div>
+                {isLoggedIn && !isMine && (
+                  isJoined ? (
+                    <button
+                      onClick={handleLeave}
+                      disabled={partyLoading}
+                      className="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-xl font-bold
+                                 active:scale-95 transition-transform disabled:opacity-50"
+                    >
+                      탈퇴
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleJoin}
+                      disabled={partyLoading || isFull}
+                      className="text-xs bg-primary text-white px-3 py-1.5 rounded-xl font-bold
+                                 active:scale-95 transition-transform disabled:opacity-50"
+                    >
+                      {isFull ? '인원 마감' : '참가하기'}
+                    </button>
+                  )
+                )}
               </div>
-              {isLoggedIn && !isMine && (
-                isJoined ? (
-                  <button
-                    onClick={handleLeave}
-                    disabled={partyLoading}
-                    className="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-xl font-bold
-                               active:scale-95 transition-transform disabled:opacity-50"
-                  >
-                    탈퇴
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleJoin}
-                    disabled={partyLoading || isFull}
-                    className="text-xs bg-primary text-white px-3 py-1.5 rounded-xl font-bold
-                               active:scale-95 transition-transform disabled:opacity-50"
-                  >
-                    {isFull ? '인원 마감' : '참가하기'}
-                  </button>
-                )
-              )}
             </div>
           )}
 

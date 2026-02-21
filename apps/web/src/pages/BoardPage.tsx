@@ -4,6 +4,7 @@ import { api, BoardPost } from '../lib/api';
 import { useAuthStore } from '../stores/authStore';
 
 type Tab = 'general' | 'party';
+type GameCategory = 'reaction' | 'puzzle' | 'action' | 'precision' | 'special';
 
 const TAB_LABELS: Record<Tab, string> = {
   general: '📋 통합',
@@ -40,6 +41,43 @@ const GAME_LABELS: Record<string, string> = {
   count_more:         '더 많이 세기',
 };
 
+const GAME_CATEGORY: Record<string, GameCategory> = {
+  timing_hit: 'reaction', speed_tap: 'reaction', lightning_reaction: 'reaction',
+  balloon_pop: 'reaction', whack_a_mole: 'reaction',
+  memory_flash: 'puzzle', color_match: 'puzzle', bigger_number: 'puzzle',
+  same_picture: 'puzzle', odd_even: 'puzzle', reverse_memory: 'puzzle',
+  direction_swipe: 'action', stop_the_bar: 'action', rps_speed: 'action',
+  sequence_tap: 'action', reverse_reaction: 'action',
+  line_trace: 'precision', target_sniper: 'precision', dark_room_tap: 'precision',
+  screw_center: 'precision', line_grow: 'precision', dual_precision: 'precision',
+  rapid_aim: 'precision',
+  math_speed: 'special', shell_game: 'special', emoji_sort: 'special', count_more: 'special',
+};
+
+type CategoryConfig = { label: string; icon: string; bg: string; text: string; activeBg: string };
+const CATEGORY_CONFIG: Record<GameCategory, CategoryConfig> = {
+  reaction:  { label: '반응/속도', icon: '⚡', bg: 'bg-orange-100', text: 'text-orange-700', activeBg: 'bg-orange-500' },
+  puzzle:    { label: '퍼즐/논리', icon: '🧠', bg: 'bg-purple-100', text: 'text-purple-700', activeBg: 'bg-purple-500' },
+  action:    { label: '액션/모션', icon: '🕹️', bg: 'bg-blue-100',   text: 'text-blue-700',   activeBg: 'bg-blue-500'   },
+  precision: { label: '정밀/집중', icon: '🎯', bg: 'bg-green-100',  text: 'text-green-700',  activeBg: 'bg-green-500'  },
+  special:   { label: '특수/파티', icon: '🌟', bg: 'bg-amber-100',  text: 'text-amber-700',  activeBg: 'bg-amber-500'  },
+};
+
+const CATEGORY_FILTERS: Array<{ key: '' | GameCategory; label: string; icon: string }> = [
+  { key: '', label: '전체', icon: '📋' },
+  { key: 'reaction',  label: '반응/속도', icon: '⚡' },
+  { key: 'puzzle',    label: '퍼즐/논리', icon: '🧠' },
+  { key: 'action',    label: '액션/모션', icon: '🕹️' },
+  { key: 'precision', label: '정밀/집중', icon: '🎯' },
+  { key: 'special',   label: '특수/파티', icon: '🌟' },
+];
+
+function gameTagClasses(gameType: string): string {
+  const cat = GAME_CATEGORY[gameType];
+  if (!cat) return 'bg-blue-100 text-blue-700';
+  return `${CATEGORY_CONFIG[cat].bg} ${CATEGORY_CONFIG[cat].text}`;
+}
+
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
@@ -70,8 +108,8 @@ function PostCard({ post, onClick }: { post: BoardPost; onClick: () => void }) {
               {isFull ? '파티 완성' : '모집 중'}
             </span>
             {post.gameType && (
-              <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-medium">
-                {GAME_LABELS[post.gameType] ?? post.gameType}
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${gameTagClasses(post.gameType)}`}>
+                {GAME_CATEGORY[post.gameType] ? `${CATEGORY_CONFIG[GAME_CATEGORY[post.gameType]].icon} ` : ''}{GAME_LABELS[post.gameType] ?? post.gameType}
               </span>
             )}
             {post.maxPlayers && (
@@ -111,6 +149,7 @@ export default function BoardPage() {
   const [total, setTotal]   = useState(0);
   const [page, setPage]     = useState(1);
   const [loading, setLoading] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<'' | GameCategory>('');
 
   const regionId = user?.primaryRegionId;
 
@@ -129,6 +168,7 @@ export default function BoardPage() {
 
   useEffect(() => {
     setPage(1);
+    setSelectedCategory('');
     fetchPosts(tab, 1, true);
   }, [tab, fetchPosts]);
 
@@ -138,7 +178,11 @@ export default function BoardPage() {
     fetchPosts(tab, next, false);
   };
 
-  const hasMore = posts.length < total;
+  const filteredPosts = selectedCategory
+    ? posts.filter(p => p.gameType && GAME_CATEGORY[p.gameType] === selectedCategory)
+    : posts;
+
+  const hasMore = posts.length < total && !selectedCategory;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -175,6 +219,36 @@ export default function BoardPage() {
         </div>
       </div>
 
+      {/* 파티 탭 — 게임 카테고리 필터 칩 */}
+      {tab === 'party' && (
+        <div className="bg-white border-b border-gray-100 px-4 py-2.5">
+          <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
+            {CATEGORY_FILTERS.map(f => {
+              const isActive = selectedCategory === f.key;
+              const catCfg = f.key ? CATEGORY_CONFIG[f.key] : null;
+              return (
+                <button
+                  key={f.key}
+                  onClick={() => setSelectedCategory(f.key)}
+                  className={`shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${
+                    isActive
+                      ? catCfg
+                        ? `${catCfg.activeBg} text-white`
+                        : 'bg-gray-700 text-white'
+                      : catCfg
+                        ? `${catCfg.bg} ${catCfg.text}`
+                        : 'bg-gray-100 text-gray-500'
+                  }`}
+                >
+                  <span>{f.icon}</span>
+                  <span>{f.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* 목록 */}
       <div className="px-4 py-3 flex flex-col gap-2">
         {loading && posts.length === 0 ? (
@@ -182,11 +256,13 @@ export default function BoardPage() {
             <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mb-3" />
             <p className="text-sm">불러오는 중...</p>
           </div>
-        ) : posts.length === 0 ? (
+        ) : filteredPosts.length === 0 ? (
           <div className="flex flex-col items-center py-16 text-gray-300">
             <p className="text-4xl mb-3">{tab === 'party' ? '🎮' : '📋'}</p>
-            <p className="text-sm">아직 게시글이 없어요</p>
-            {isLoggedIn && (
+            <p className="text-sm">
+              {selectedCategory ? `${CATEGORY_CONFIG[selectedCategory].label} 파티가 없어요` : '아직 게시글이 없어요'}
+            </p>
+            {isLoggedIn && !selectedCategory && (
               <button
                 onClick={() => navigate('/board/write')}
                 className="mt-4 text-primary text-sm font-bold underline"
@@ -197,7 +273,7 @@ export default function BoardPage() {
           </div>
         ) : (
           <>
-            {posts.map(p => (
+            {filteredPosts.map(p => (
               <PostCard
                 key={p.id}
                 post={p}
