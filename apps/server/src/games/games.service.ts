@@ -314,6 +314,7 @@ export class GamesService {
     const results = await this.resultsRepo.find({
       where: { userId, gameType },
       order: { normalizedScore: 'DESC' },
+      take: 1000, // 최대 1,000개 — 메모리 과부하 방지
     });
 
     if (results.length === 0) return { best: 0, average: 0, count: 0 };

@@ -77,27 +77,33 @@ export class GachaService {
       throw new BadRequestException('보석이 부족합니다.');
     }
 
-    // 현재 소유 아이템 ID 목록
-    const owned = await this.inventoryRepo.find({ where: { userId }, select: ['itemId'] });
-    const ownedIds = new Set(owned.map(o => o.itemId));
+    try {
+      // 현재 소유 아이템 ID 목록
+      const owned = await this.inventoryRepo.find({ where: { userId }, select: ['itemId'] });
+      const ownedIds = new Set(owned.map(o => o.itemId));
 
-    // 풀 전체 조회 (뽑기 가능 아이템: 코인/보석 가격 없는 event 아이템 제외, isActive 만)
-    const pool = await this.itemRepo.find({ where: { isActive: true } });
-    const poolByRarity: Record<string, AvatarItemEntity[]> = {
-      [ItemRarity.COMMON]:    pool.filter(i => i.rarity === ItemRarity.COMMON),
-      [ItemRarity.RARE]:      pool.filter(i => i.rarity === ItemRarity.RARE),
-      [ItemRarity.EPIC]:      pool.filter(i => i.rarity === ItemRarity.EPIC),
-      [ItemRarity.LEGENDARY]: pool.filter(i => i.rarity === ItemRarity.LEGENDARY),
-    };
+      // 풀 전체 조회 (최대 10,000개 제한)
+      const pool = await this.itemRepo.find({ where: { isActive: true }, take: 10_000 });
+      const poolByRarity: Record<string, AvatarItemEntity[]> = {
+        [ItemRarity.COMMON]:    pool.filter(i => i.rarity === ItemRarity.COMMON),
+        [ItemRarity.RARE]:      pool.filter(i => i.rarity === ItemRarity.RARE),
+        [ItemRarity.EPIC]:      pool.filter(i => i.rarity === ItemRarity.EPIC),
+        [ItemRarity.LEGENDARY]: pool.filter(i => i.rarity === ItemRarity.LEGENDARY),
+      };
 
-    const results: GachaResult[] = [];
-    for (let i = 0; i < count; i++) {
-      const pullResult = await this.singlePull(userId, ownedIds, poolByRarity);
-      results.push(pullResult);
-      if (pullResult.item) ownedIds.add(pullResult.item.id); // 이번 뽑기에서 얻은 것도 반영
+      const results: GachaResult[] = [];
+      for (let i = 0; i < count; i++) {
+        const pullResult = await this.singlePull(userId, ownedIds, poolByRarity);
+        results.push(pullResult);
+        if (pullResult.item) ownedIds.add(pullResult.item.id);
+      }
+
+      return { results, remaining: await this.getUserGems(userId) };
+    } catch (err) {
+      // 아이템 지급 실패 시 보석 전액 환불
+      await this.avatarService.addGems(userId, gemCost);
+      throw err;
     }
-
-    return { results, remaining: await this.getUserGems(userId) };
   }
 
   private async singlePull(

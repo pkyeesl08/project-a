@@ -86,17 +86,24 @@ export class RankingsService {
   /** 내 모든 랭킹 조회 (패턴 스캔) */
   async getMyRankings(userId: string) {
     const results: { scope: string; scopeId: string; gameType: string; rank: number; score: number }[] = [];
+    const MAX_ITERATIONS = 50; // Redis 키가 많아도 최대 50회 SCAN 반복으로 제한
     try {
       let cursor = '0';
+      let iterations = 0;
       do {
         const [next, keys] = await this.redis.scan(cursor, 'MATCH', 'ranking:*', 'COUNT', 100);
         cursor = next;
+        iterations++;
         for (const key of keys) {
           const [, scope, scopeId, gameType] = key.split(':');
           const rank = await this.redis.zrevrank(key, userId);
           if (rank === null) continue;
           const score = await this.redis.zscore(key, userId);
           results.push({ scope, scopeId, gameType, rank: rank + 1, score: parseFloat(score ?? '0') });
+        }
+        if (iterations >= MAX_ITERATIONS) {
+          console.warn(`[Rankings] SCAN 반복 상한 도달 (${MAX_ITERATIONS}회), 조기 종료`);
+          break;
         }
       } while (cursor !== '0');
     } catch (err) {

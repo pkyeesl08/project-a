@@ -58,25 +58,16 @@ export class SeasonPassService {
     const seasonId = await this.seasonsService.getCurrentSeasonId();
     if (!seasonId) return;
 
+    // 레코드 보장 후 원자적 UPDATE (Race Condition 방지: 읽기-쓰기 분리 제거)
+    await this.getOrCreatePass(userId, seasonId);
+
     const xpAmount = XP_GRANTS[source];
     await this.passRepo
       .createQueryBuilder()
       .update()
-      .set({ seasonXp: () => `"seasonXp" + ${xpAmount}` })
-      .where('"userId" = :userId AND "seasonId" = :seasonId', { userId, seasonId })
+      .set({ seasonXp: () => `"seasonXp" + :xpAmount` })
+      .where('"userId" = :userId AND "seasonId" = :seasonId', { userId, seasonId, xpAmount })
       .execute();
-
-    // 존재하지 않으면 생성 후 재시도
-    const existing = await this.passRepo.findOne({ where: { userId, seasonId } });
-    if (!existing) {
-      await this.getOrCreatePass(userId, seasonId);
-      await this.passRepo
-        .createQueryBuilder()
-        .update()
-        .set({ seasonXp: () => `"seasonXp" + ${xpAmount}` })
-        .where('"userId" = :userId AND "seasonId" = :seasonId', { userId, seasonId })
-        .execute();
-    }
   }
 
   /** 특정 티어 무료/골드 보상 수령 — PostgreSQL array_append로 Race Condition 방지 */

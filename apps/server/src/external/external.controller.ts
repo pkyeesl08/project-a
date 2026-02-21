@@ -1,8 +1,23 @@
-import { Controller, Get, Post, Delete, Param, Query, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Param, Query, Body, UseGuards, BadRequestException } from '@nestjs/common';
 import { ExternalService } from './external.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUserId } from '../common/auth.types';
 import { ok } from '../common/response';
+
+/** 외부 게임 닉네임 길이 검증 */
+function validateGameId(value: string | undefined, label: string, max = 50): string {
+  const trimmed = (value ?? '').trim();
+  if (!trimmed || trimmed.length < 1 || trimmed.length > max) {
+    throw new BadRequestException(`${label}은 1~${max}자여야 합니다.`);
+  }
+  return trimmed;
+}
+
+/** limit 파라미터 안전 클램프 (1~100) */
+function safeLimit(raw: string | number, def = 50): number {
+  const n = typeof raw === 'number' ? raw : parseInt(String(raw), 10);
+  return Number.isFinite(n) ? Math.max(1, Math.min(100, n)) : def;
+}
 
 @Controller('external')
 export class ExternalController {
@@ -12,7 +27,7 @@ export class ExternalController {
 
   @Get('lol/lookup')
   async lookupLol(@Query('riotId') riotId: string) {
-    return ok(await this.externalService.lookupLol(riotId));
+    return ok(await this.externalService.lookupLol(validateGameId(riotId, 'Riot ID')));
   }
 
   @Post('lol/connect')
@@ -33,14 +48,14 @@ export class ExternalController {
     @Query('scopeId') scopeId: string,
     @Query('limit') limit = '50',
   ) {
-    return ok(await this.externalService.getLolRanking(scope, scopeId, +limit));
+    return ok(await this.externalService.getLolRanking(scope, scopeId, safeLimit(limit)));
   }
 
   /* ── 메이플스토리 ── */
 
   @Get('maple/lookup')
   async lookupMaple(@Query('characterName') characterName: string) {
-    return ok(await this.externalService.lookupMaple(characterName));
+    return ok(await this.externalService.lookupMaple(validateGameId(characterName, '캐릭터명')));
   }
 
   @Post('maple/connect')
@@ -61,14 +76,14 @@ export class ExternalController {
     @Query('scopeId') scopeId: string,
     @Query('limit') limit = '50',
   ) {
-    return ok(await this.externalService.getMapleRanking(scope, scopeId, +limit));
+    return ok(await this.externalService.getMapleRanking(scope, scopeId, safeLimit(limit)));
   }
 
   /* ── FC 온라인 ── */
 
   @Get('fc/lookup')
   async lookupFc(@Query('nickname') nickname: string) {
-    return ok(await this.externalService.lookupFcOnline(nickname));
+    return ok(await this.externalService.lookupFcOnline(validateGameId(nickname, '닉네임')));
   }
 
   @Post('fc/connect')
@@ -90,7 +105,7 @@ export class ExternalController {
     @Query('playerName') playerName: string,
     @Query('shard') shard: 'kakao' | 'steam' = 'kakao',
   ) {
-    return ok(await this.externalService.lookupPubg(playerName, shard));
+    return ok(await this.externalService.lookupPubg(validateGameId(playerName, '플레이어명'), shard));
   }
 
   @Post('pubg/connect')
@@ -114,14 +129,14 @@ export class ExternalController {
     @Query('scopeId') scopeId: string,
     @Query('limit') limit = '50',
   ) {
-    return ok(await this.externalService.getPubgRanking(scope, scopeId, +limit));
+    return ok(await this.externalService.getPubgRanking(scope, scopeId, safeLimit(limit)));
   }
 
   /* ── Steam ── */
 
   @Get('steam/lookup')
   async lookupSteam(@Query('input') input: string) {
-    return ok(await this.externalService.lookupSteam(input));
+    return ok(await this.externalService.lookupSteam(validateGameId(input, 'Steam ID/닉네임', 100)));
   }
 
   @Post('steam/connect')
@@ -142,7 +157,7 @@ export class ExternalController {
     @Query('scopeId') scopeId: string,
     @Query('limit') limit = '50',
   ) {
-    return ok(await this.externalService.getSteamRanking(scope, scopeId, +limit));
+    return ok(await this.externalService.getSteamRanking(scope, scopeId, safeLimit(limit)));
   }
 
   /* ── 범용 ── */
