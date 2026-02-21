@@ -63,15 +63,9 @@ import { GachaModule } from './gacha/gacha.module';
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    // 공개 엔드포인트 Rate Limiting (분당 60회)
+    // 전역 Rate Limiting — 모든 엔드포인트 (분당 60회, userId 또는 실제 IP 기반)
     consumer
       .apply(RateLimitMiddleware)
-      .forRoutes(
-        { path: 'auth/login', method: RequestMethod.POST },
-        { path: 'auth/register', method: RequestMethod.POST },
-        { path: 'auth/refresh', method: RequestMethod.POST },
-        { path: 'users/check-nickname', method: RequestMethod.GET },
-        { path: 'rankings/*', method: RequestMethod.GET },
-      );
+      .forRoutes({ path: '*', method: RequestMethod.ALL });
   }
 }

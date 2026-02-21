@@ -26,9 +26,23 @@ async function bootstrap() {
   });
 
   app.setGlobalPrefix('api');
+
+  // CORS: 허용 origin 화이트리스트 (쉼표 구분 다중 도메인 지원)
+  const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
+    .split(',')
+    .map(o => o.trim())
+    .filter(Boolean);
   app.enableCors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS 정책 위반: 허용되지 않은 출처입니다.`));
+      }
+    },
     credentials: true,
+    methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
   // 전역 예외 필터 — 프로덕션에서 스택트레이스 차단

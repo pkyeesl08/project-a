@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserEntity } from './user.entity';
@@ -97,8 +97,8 @@ export class UsersService {
     await this.usersRepo
       .createQueryBuilder()
       .update()
-      .set({ eloRating: () => `"eloRating" + ${Math.abs(amount)}` })
-      .where('id = :userId', { userId })
+      .set({ eloRating: () => `"eloRating" + :safeAmount` })
+      .where('id = :userId', { userId, safeAmount: Math.abs(amount) })
       .execute();
   }
 
@@ -119,13 +119,20 @@ export class UsersService {
     return { newXp, newLevel, leveledUp: newLevel > prevLevel };
   }
 
-  async getStats(userId: string) {
+  async getStats(userId: string, requestingUserId?: string) {
     const user = await this.findById(userId);
     if (!user) throw new NotFoundException('User not found');
 
+    // 본인이 아니고 비공개 프로필이면 거부
+    if (userId !== requestingUserId && !user.isPublic) {
+      throw new ForbiddenException('비공개 프로필입니다.');
+    }
+
+    // 최근 500개로 제한 (전체 조회 방지)
     const results = await this.resultsRepo.find({
       where: { userId },
       order: { playedAt: 'DESC' },
+      take: 500,
     });
 
     const totalGames = results.length;

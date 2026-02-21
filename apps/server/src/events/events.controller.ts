@@ -33,8 +33,9 @@ export class EventsController {
     return ok(await this.eventsService.getMyEventRank(eventId, userId));
   }
 
-  /** 이벤트 생성 (관리자) */
+  /** 이벤트 생성 (관리자 전용) */
   @Post()
+  @UseGuards(JwtAuthGuard)
   async createEvent(@Body() body: {
     regionId: string;
     title: string;
@@ -52,8 +53,9 @@ export class EventsController {
     }));
   }
 
-  /** 이벤트 종료 및 보상 지급 (관리자) */
+  /** 이벤트 종료 및 보상 지급 (관리자 전용) */
   @Post(':eventId/finalize')
+  @UseGuards(JwtAuthGuard)
   async finalizeEvent(@Param('eventId') eventId: string) {
     return ok(await this.eventsService.finalizeEvent(eventId));
   }

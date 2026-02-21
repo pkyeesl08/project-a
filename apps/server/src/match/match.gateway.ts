@@ -4,7 +4,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
-import { Inject } from '@nestjs/common';
+import { Inject, OnModuleDestroy } from '@nestjs/common';
 import Redis from 'ioredis';
 import { REDIS_CLIENT } from '../redis/redis.module';
 
@@ -29,7 +29,7 @@ const MATCH_RECORD_TTL_SEC = 3600;
 const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173';
 
 @WebSocketGateway({ cors: { origin: CORS_ORIGIN, credentials: true } })
-export class MatchGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class MatchGateway implements OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy {
   @WebSocketServer()
   server: Server;
 
@@ -39,12 +39,20 @@ export class MatchGateway implements OnGatewayConnection, OnGatewayDisconnect {
   /** 소켓ID → 인증된 userId 매핑 */
   private socketUserMap = new Map<string, string>();
 
+  /** 큐 타임아웃 폴링 타이머 핸들 */
+  private pruneTimer: ReturnType<typeof setInterval>;
+
   constructor(
     private readonly jwtService: JwtService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {
     // 5초마다 타임아웃된 큐 플레이어 제거
-    setInterval(() => this.pruneTimedOutQueue(), 5000);
+    this.pruneTimer = setInterval(() => this.pruneTimedOutQueue(), 5000);
+  }
+
+  /** 모듈 종료 시 타이머 정리 */
+  onModuleDestroy() {
+    clearInterval(this.pruneTimer);
   }
 
   /** 30초 초과 대기자 큐에서 제거 후 클라이언트에 알림 */

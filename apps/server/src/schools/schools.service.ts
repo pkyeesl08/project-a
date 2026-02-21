@@ -34,9 +34,12 @@ export class SchoolsService {
   }
 
   async search(query: string) {
+    if (!query || query.trim().length < 2) {
+      throw new BadRequestException('검색어는 최소 2자 이상이어야 합니다.');
+    }
     return this.schoolsRepo
       .createQueryBuilder('school')
-      .where('school.name ILIKE :query', { query: `%${query}%` })
+      .where('school.name ILIKE :query', { query: `%${query.trim()}%` })
       .limit(20)
       .getMany();
   }

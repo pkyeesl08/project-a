@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, NotFoundException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { DailyMissionEntity, MissionType, MISSION_DEFINITIONS } from './mission.entity';
+import { GameResultEntity } from '../games/game-result.entity';
 import { UsersService } from '../users/users.service';
 import { AvatarService } from '../avatar/avatar.service';
 
@@ -10,6 +11,8 @@ export class MissionsService {
   constructor(
     @InjectRepository(DailyMissionEntity)
     private missionRepo: Repository<DailyMissionEntity>,
+    @InjectRepository(GameResultEntity)
+    private resultsRepo: Repository<GameResultEntity>,
     private usersService: UsersService,
     private avatarService: AvatarService,
   ) {}
@@ -132,16 +135,16 @@ export class MissionsService {
     await Promise.allSettled(updates);
   }
 
-  /** 오늘 플레이한 고유 게임 타입 수 (방금 한 게임 포함) */
+  /** 오늘 플레이한 고유 게임 타입 수 (DB에서 실제 집계) */
   private async countUniqueTodayGameTypes(userId: string, date: string, justPlayed: string): Promise<number> {
-    // 간단히: 오늘 PLAY_3_GAMES 미션의 currentValue를 uniqueTypes 추적용으로 쓰지 않고
-    // play_3_types mission의 metadata에서 추적. 여기선 DB 조회로 간단히 처리
     const from = new Date(`${date}T00:00:00.000Z`);
     const to = new Date(`${date}T23:59:59.999Z`);
-
-    // GameResultEntity를 직접 쿼리하는 대신, 미션 진행도를 원시적으로 관리
-    // 단순화: 현재값 + 1 반환 (중복 탭 방지는 게임 서비스에서 처리)
-    return 1;
+    const raw = await this.resultsRepo
+      .createQueryBuilder('r')
+      .select('COUNT(DISTINCT r."gameType")', 'count')
+      .where('r."userId" = :userId AND r."playedAt" >= :from AND r."playedAt" <= :to', { userId, from, to })
+      .getRawOne<{ count: string }>();
+    return parseInt(raw?.count ?? '0', 10);
   }
 
   /** 미션 보상 수령 — 원자적 UPDATE로 Race Condition 방지 */
