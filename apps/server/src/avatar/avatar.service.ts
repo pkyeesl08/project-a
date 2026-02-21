@@ -258,6 +258,11 @@ export class AvatarService {
     await this.usersRepo.increment({ id: userId }, 'coins', amount);
   }
 
+  /** 보석 지급 (출석/시즌패스/이벤트 보상 등 내부용) */
+  async addGems(userId: string, amount: number) {
+    await this.usersRepo.increment({ id: userId }, 'gems', amount);
+  }
+
   /* ═══════════════════════════════════════════
    * 아이템 시드 데이터 (서버 최초 기동 시)
    * ═══════════════════════════════════════════ */

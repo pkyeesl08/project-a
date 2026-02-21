@@ -78,6 +78,22 @@ export class UsersService {
       .execute();
   }
 
+  /**
+   * XP 부여 & 레벨 자동 갱신
+   * 레벨 공식: level = floor(sqrt(xp / 50)) + 1 (최대 100)
+   */
+  async addXp(userId: string, amount: number): Promise<{ newXp: number; newLevel: number; leveledUp: boolean }> {
+    const user = await this.usersRepo.findOne({ where: { id: userId } });
+    if (!user) return { newXp: 0, newLevel: 1, leveledUp: false };
+
+    const prevLevel = user.level;
+    const newXp = (user.xp ?? 0) + Math.abs(amount);
+    const newLevel = Math.min(100, Math.floor(Math.sqrt(newXp / 50)) + 1);
+
+    await this.usersRepo.update(userId, { xp: newXp, level: newLevel });
+    return { newXp, newLevel, leveledUp: newLevel > prevLevel };
+  }
+
   async getStats(userId: string) {
     const user = await this.findById(userId);
     if (!user) throw new NotFoundException('User not found');

@@ -13,6 +13,7 @@ import { AvatarModule } from '../avatar/avatar.module';
 import { WeeklyChallengeModule } from '../weekly-challenge/weekly-challenge.module';
 import { RedisModule } from '../redis/redis.module';
 import { NotificationsModule } from '../notifications/notification.module';
+import { SeasonPassModule } from '../season-pass/season-pass.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { NotificationsModule } from '../notifications/notification.module';
     WeeklyChallengeModule,
     RedisModule,
     NotificationsModule,
+    SeasonPassModule,
   ],
   controllers: [GamesController],
   providers: [GamesService, DailyGameService],

@@ -13,6 +13,8 @@ export const MISSION_DEFINITIONS: Record<MissionType, {
   description: string;
   targetValue: number;
   rewardElo: number;
+  rewardCoins: number;
+  rewardXp: number;
   icon: string;
 }> = {
   [MissionType.PLAY_3_GAMES]: {
@@ -20,6 +22,8 @@ export const MISSION_DEFINITIONS: Record<MissionType, {
     description: '오늘 게임을 3판 플레이하세요',
     targetValue: 3,
     rewardElo: 10,
+    rewardCoins: 150,
+    rewardXp: 50,
     icon: '🎮',
   },
   [MissionType.WIN_2_PVP]: {
@@ -27,6 +31,8 @@ export const MISSION_DEFINITIONS: Record<MissionType, {
     description: 'PvP 경기에서 2번 승리하세요',
     targetValue: 2,
     rewardElo: 20,
+    rewardCoins: 300,
+    rewardXp: 80,
     icon: '⚔️',
   },
   [MissionType.NEW_HIGHSCORE]: {
@@ -34,6 +40,8 @@ export const MISSION_DEFINITIONS: Record<MissionType, {
     description: '어떤 게임이든 개인 최고 기록을 경신하세요',
     targetValue: 1,
     rewardElo: 15,
+    rewardCoins: 200,
+    rewardXp: 60,
     icon: '🏆',
   },
   [MissionType.PLAY_3_TYPES]: {
@@ -41,6 +49,8 @@ export const MISSION_DEFINITIONS: Record<MissionType, {
     description: '서로 다른 게임 3종류를 플레이하세요',
     targetValue: 3,
     rewardElo: 10,
+    rewardCoins: 150,
+    rewardXp: 50,
     icon: '🌟',
   },
 };

@@ -12,6 +12,7 @@ import { AchievementsService } from '../achievements/achievements.service';
 import { AvatarService } from '../avatar/avatar.service';
 import { WeeklyChallengeService } from '../weekly-challenge/weekly-challenge.service';
 import { NotificationService } from '../notifications/notification.service';
+import { SeasonPassService } from '../season-pass/season-pass.service';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { normalizeScore, calculateElo, calculateSoloEloAdjustment, GameType, GAME_CONFIGS } from '@donggamerank/shared';
 
@@ -58,10 +59,14 @@ function validateRawScore(gameType: GameType, rawScore: number): void {
   }
 }
 
-/** 게임 완료 시 지급 코인 (솔로 기본값) */
-const COIN_REWARD_SOLO = 5;
+/** 게임 완료 시 지급 코인 (솔로 기본값) — 하루 20판 기준 최대 600 코인 */
+const COIN_REWARD_SOLO = 30;
 /** PvP 승리 추가 보너스 */
-const COIN_REWARD_PVP_WIN = 10;
+const COIN_REWARD_PVP_WIN = 50;
+/** 게임 완료 시 지급 계정 XP */
+const XP_PER_GAME = 10;
+/** PvP 승리 추가 XP */
+const XP_PER_PVP_WIN = 20;
 
 @Injectable()
 export class GamesService {
@@ -76,6 +81,7 @@ export class GamesService {
     private avatarService: AvatarService,
     private weeklyChallengeService: WeeklyChallengeService,
     private notificationService: NotificationService,
+    private seasonPassService: SeasonPassService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
 
@@ -210,13 +216,18 @@ export class GamesService {
       }).catch(() => {});
     }
 
+    const pvpWon = data.mode === 'pvp' && data.metadata?.won === true;
+    const xpReward = XP_PER_GAME + (pvpWon ? XP_PER_PVP_WIN : 0);
+
     Promise.allSettled([
       this.avatarService.addCoins(userId, coinReward),
+      this.usersService.addXp(userId, xpReward),
+      this.seasonPassService.addSeasonXp(userId, 'gameComplete'),
       this.missionsService.handleGameResult(userId, {
         gameType: data.gameType,
         mode: data.mode,
         isNewHighScore,
-        won: data.metadata?.won === true,
+        won: pvpWon,
       }),
       this.achievementsService.checkAfterGame(userId, {
         gameType: data.gameType,

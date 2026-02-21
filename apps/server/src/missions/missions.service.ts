@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { DailyMissionEntity, MissionType, MISSION_DEFINITIONS } from './mission.entity';
 import { UsersService } from '../users/users.service';
+import { AvatarService } from '../avatar/avatar.service';
 
 @Injectable()
 export class MissionsService {
@@ -10,6 +11,7 @@ export class MissionsService {
     @InjectRepository(DailyMissionEntity)
     private missionRepo: Repository<DailyMissionEntity>,
     private usersService: UsersService,
+    private avatarService: AvatarService,
   ) {}
 
   private today(): string {
@@ -156,11 +158,17 @@ export class MissionsService {
     await this.missionRepo.save(mission);
 
     const def = MISSION_DEFINITIONS[mission.missionType];
-    await this.usersService.addElo(userId, def.rewardElo);
+    await Promise.allSettled([
+      this.usersService.addElo(userId, def.rewardElo),
+      this.avatarService.addCoins(userId, def.rewardCoins),
+      this.usersService.addXp(userId, def.rewardXp),
+    ]);
 
     return {
       claimed: true,
       rewardElo: def.rewardElo,
+      rewardCoins: def.rewardCoins,
+      rewardXp: def.rewardXp,
       missionTitle: def.title,
     };
   }

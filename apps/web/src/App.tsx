@@ -17,6 +17,8 @@ import ExternalRankingPage from './pages/ExternalRankingPage';
 import AvatarPage from './pages/AvatarPage';
 import EndlessModePage from './pages/EndlessModePage';
 import ChallengeLinkPage from './pages/ChallengeLinkPage';
+import SeasonPassPage from './pages/SeasonPassPage';
+import GachaPage from './pages/GachaPage';
 
 /** 로그인이 필요한 라우트 — 미로그인 시 /register로 리다이렉트 */
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -58,6 +60,12 @@ export default function App() {
       {/* 풀스크린 (탭바 없음) */}
       <Route path="/avatar" element={
         <PrivateRoute><AvatarPage /></PrivateRoute>
+      } />
+      <Route path="/season-pass" element={
+        <PrivateRoute><SeasonPassPage /></PrivateRoute>
+      } />
+      <Route path="/gacha" element={
+        <PrivateRoute><GachaPage /></PrivateRoute>
       } />
       <Route path="/play/:gameType" element={<GamePlayPage />} />
       <Route path="/challenge/:token" element={<ChallengeLinkPage />} />

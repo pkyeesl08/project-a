@@ -7,6 +7,7 @@ import { getTier, getNextTier } from '../lib/tier';
 import DailyBattleBanner from '../components/DailyBattleBanner';
 import DailyGameCard from '../components/DailyGameCard';
 import WeeklyChallengeCard from '../components/WeeklyChallengeCard';
+import AttendanceModal from '../components/AttendanceModal';
 
 const CATEGORY_LABELS = {
   [GameCategory.REACTION]: { label: '⚡ 반응', color: 'bg-game-reaction' },
@@ -29,15 +30,22 @@ export default function HomePage() {
   const [claiming, setClaiming] = useState<string | null>(null);
   const [season, setSeason] = useState<{ id: string; name: string } | null>(null);
   const [myRank, setMyRank] = useState<{ regionRank?: number; totalPlayers?: number } | null>(null);
+  const [showAttendance, setShowAttendance] = useState(false);
+  const [attendanceStreak, setAttendanceStreak] = useState(0);
+  const [checkedInToday, setCheckedInToday] = useState(false);
 
   const tier = getTier(myElo);
   const nextTier = getNextTier(myElo);
 
-  // 미션, 시즌, 내 랭킹 로드
+  // 미션, 시즌, 내 랭킹, 출석 로드
   useEffect(() => {
     api.getMissions().then(setMissions).catch(() => {});
     api.getCurrentSeason().then(s => setSeason({ id: s.id, name: s.name })).catch(() => {});
     api.getMyRankings().then(setMyRank).catch(() => {});
+    api.getAttendanceStatus().then(s => {
+      setAttendanceStreak(s.streak);
+      setCheckedInToday(s.checkedInToday);
+    }).catch(() => {});
   }, []);
 
   const handleClaimMission = async (mission: DailyMission) => {
@@ -53,14 +61,9 @@ export default function HomePage() {
     }
   };
 
-  // 시즌 패스 XP 계산 (간단 버전)
-  const completedMissionCount = missions.filter(m => m.rewardClaimed).length;
-  const seasonXp = completedMissionCount * 50;
-  const seasonLevel = Math.floor(seasonXp / 200) + 1;
-  const xpInLevel = seasonXp % 200;
-  const xpProgress = xpInLevel / 200;
-
   return (
+    <>
+    {showAttendance && <AttendanceModal onClose={() => { setShowAttendance(false); api.getAttendanceStatus().then(s => { setAttendanceStreak(s.streak); setCheckedInToday(s.checkedInToday); }).catch(() => {}); }} />}
     <div className="p-4 space-y-5">
       {/* 동네 랭킹 + 티어 요약 */}
       <section className="bg-gradient-to-br from-primary to-primary-dark rounded-2xl p-5 text-white shadow-lg">
@@ -100,36 +103,31 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 시즌 패스 */}
-      <section className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <p className="font-black text-sm">🎫 {season?.name ?? 'Season 1'} 패스</p>
-            <p className="text-xs text-gray-400">Lv.{seasonLevel} · {xpInLevel} / 200 XP</p>
-          </div>
-          <div className="text-right">
-            <span className="text-xs bg-primary/10 text-primary rounded-full px-2 py-0.5 font-bold">무료</span>
-          </div>
-        </div>
-        <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden mb-3">
-          <div
-            className="h-full bg-gradient-to-r from-primary to-accent rounded-full transition-all"
-            style={{ width: `${Math.max(3, xpProgress * 100)}%` }}
-          />
-        </div>
-        {/* 트랙 미리보기 */}
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-          {['🪙×30', '🎨 칭호', '🪙×50', '💎×5', '👑 프레임'].map((reward, i) => (
-            <div key={i} className={`flex-shrink-0 rounded-lg p-2 text-center w-14 ${
-              i < seasonLevel ? 'bg-primary/10 border border-primary/30' : 'bg-gray-50 border border-gray-200'
-            }`}>
-              <p className="text-base">{reward.split(' ')[0]}</p>
-              <p className="text-[9px] text-gray-400 mt-0.5 leading-tight">{reward.split(' ').slice(1).join(' ')}</p>
-              {i < seasonLevel && <p className="text-[9px] text-primary font-bold">✓</p>}
+      {/* 출석 체크 + 시즌 패스 버튼 */}
+      <div className="flex gap-3">
+        <button
+          onClick={() => setShowAttendance(true)}
+          className={`flex-1 rounded-2xl p-4 shadow-sm border text-left transition-all active:scale-95 ${
+            checkedInToday ? 'bg-green-50 border-green-200' : 'bg-white border-gray-100'
+          }`}>
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">{checkedInToday ? '✅' : '📅'}</span>
+            <div>
+              <p className="text-sm font-black">{checkedInToday ? '출석 완료!' : '출석 체크'}</p>
+              <p className="text-xs text-gray-400">🔥 {attendanceStreak}일 연속</p>
             </div>
-          ))}
-        </div>
-      </section>
+          </div>
+        </button>
+        <Link
+          to="/season-pass"
+          className="flex-1 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-2xl p-4 shadow-sm active:scale-95 transition-all">
+          <p className="text-sm font-black">🎫 시즌 패스</p>
+          <p className="text-xs opacity-70">{season?.name ?? 'Season 1'}</p>
+          <div className="mt-2 flex gap-1">
+            <Link to="/gacha" className="bg-white/20 rounded-full px-2 py-0.5 text-xs" onClick={e => e.stopPropagation()}>🎲 뽑기</Link>
+          </div>
+        </Link>
+      </div>
 
       {/* 오늘의 게임 */}
       <DailyGameCard />
@@ -166,16 +164,21 @@ export default function HomePage() {
                   <button
                     onClick={() => handleClaimMission(m)}
                     disabled={m.rewardClaimed || claiming === m.id}
-                    className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-center ${
                       m.rewardClaimed
                         ? 'bg-gray-100 text-gray-400'
                         : 'bg-accent text-white active:scale-95'
                     }`}
                   >
-                    {m.rewardClaimed ? '완료' : claiming === m.id ? '...' : `+${m.rewardElo}ELO`}
+                    {m.rewardClaimed ? '✓완료' : claiming === m.id ? '...' : (
+                      <span>🪙{m.rewardCoins ?? 150}<br/><span className="text-[9px] opacity-70">+{m.rewardElo}ELO</span></span>
+                    )}
                   </button>
                 ) : (
-                  <span className="flex-shrink-0 text-xs text-gray-300 font-bold">+{m.rewardElo}</span>
+                  <div className="flex-shrink-0 text-right">
+                    <p className="text-xs text-gray-300 font-bold">🪙{m.rewardCoins ?? 150}</p>
+                    <p className="text-[10px] text-gray-200">+{m.rewardElo}ELO</p>
+                  </div>
                 )}
               </div>
             ))}
@@ -223,5 +226,6 @@ export default function HomePage() {
         </div>
       </section>
     </div>
+    </>
   );
 }

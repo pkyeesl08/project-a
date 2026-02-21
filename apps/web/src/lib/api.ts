@@ -11,6 +11,8 @@ export interface DailyMission {
   isCompleted: boolean;
   rewardClaimed: boolean;
   rewardElo: number;
+  rewardCoins: number;
+  rewardXp: number;
 }
 
 export interface AchievementItem {
@@ -541,6 +543,91 @@ class ApiClient {
       scoreTimeline: [number, number][];
       createdAt: string;
     } | null>(`/games/challenge-link/${token}`);
+  }
+
+  // ───── 출석 체크 ─────
+
+  checkIn() {
+    return this.request<{
+      alreadyChecked: boolean;
+      streak: number;
+      cycleDay: number;
+      rewards: { coins?: number; gems?: number; label: string } | null;
+    }>('/attendance/check-in', { method: 'POST' });
+  }
+
+  getAttendanceStatus() {
+    return this.request<{
+      checkedInToday: boolean;
+      streak: number;
+      weekCalendar: Array<{
+        date: string;
+        dayLabel: string;
+        checked: boolean;
+        isToday: boolean;
+        reward: { coins?: number; gems?: number; label: string };
+      }>;
+      nextReward: { coins?: number; gems?: number; label: string; cycleDay: number } | null;
+      todayRewards: { coins?: number; gems?: number; label: string } | null;
+    }>('/attendance/status');
+  }
+
+  // ───── 시즌 패스 ─────
+
+  getSeasonPassProgress() {
+    return this.request<{
+      seasonId?: string;
+      seasonXp: number;
+      hasGoldPass: boolean;
+      currentTier: number;
+      nextTierXp: number | null;
+      xpToNext: number | null;
+      claimedFreeTiers: number[];
+      claimedGoldTiers: number[];
+      goldPassPrice: number;
+      tiers: Array<{
+        tier: number;
+        requiredXp: number;
+        unlocked: boolean;
+        freeClaimable: boolean;
+        goldClaimable: boolean;
+        free: { coins?: number; gems?: number; assetKey?: string; label: string };
+        gold: { coins?: number; gems?: number; assetKey?: string; label: string };
+      }>;
+    }>('/season-pass/my-progress');
+  }
+
+  claimSeasonPassTier(tier: number, track: 'free' | 'gold') {
+    return this.request<{ claimed: boolean; tier: number }>(`/season-pass/claim/${tier}/${track}`, { method: 'POST' });
+  }
+
+  purchaseGoldPass() {
+    return this.request<{ purchased: boolean; gemsSpent: number }>('/season-pass/purchase-gold', { method: 'POST' });
+  }
+
+  // ───── 뽑기 ─────
+
+  getGachaPity() {
+    return this.request<{
+      epicPity: number;
+      legendaryPity: number;
+      epicAt: number;
+      legendaryAt: number;
+      singleCost: number;
+      tenCost: number;
+    }>('/gacha/pity');
+  }
+
+  pullGacha(count: 1 | 10) {
+    return this.request<{
+      results: Array<{
+        rarity: string;
+        item: { id: string; name: string; assetKey: string; rarity: string; type: string } | null;
+        isDuplicate: boolean;
+        dupeCoins: number;
+      }>;
+      remaining: number;
+    }>('/gacha/pull', { method: 'POST', body: JSON.stringify({ count }) });
   }
 }
 

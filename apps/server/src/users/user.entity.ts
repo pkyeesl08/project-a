@@ -48,6 +48,14 @@ export class UserEntity {
   @Column({ type: 'integer', default: 0 })
   gems: number;
 
+  /** 누적 경험치 — 계정 레벨 계산에 사용 */
+  @Column({ type: 'integer', default: 0 })
+  xp: number;
+
+  /** 계정 레벨 — xp 기반 자동 갱신 (1~100) */
+  @Column({ type: 'integer', default: 1 })
+  level: number;
+
   @CreateDateColumn()
   createdAt: Date;
 

@@ -20,6 +20,9 @@ import { AvatarModule } from './avatar/avatar.module';
 import { NeighborhoodBattleModule } from './neighborhood-battle/neighborhood-battle.module';
 import { WeeklyChallengeModule } from './weekly-challenge/weekly-challenge.module';
 import { NotificationsModule } from './notifications/notification.module';
+import { AttendanceModule } from './attendance/attendance.module';
+import { SeasonPassModule } from './season-pass/season-pass.module';
+import { GachaModule } from './gacha/gacha.module';
 
 @Module({
   imports: [
@@ -53,6 +56,9 @@ import { NotificationsModule } from './notifications/notification.module';
     NeighborhoodBattleModule,
     WeeklyChallengeModule,
     NotificationsModule,
+    AttendanceModule,
+    SeasonPassModule,
+    GachaModule,
   ],
 })
 export class AppModule implements NestModule {
