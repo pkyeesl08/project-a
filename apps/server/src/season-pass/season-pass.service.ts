@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { UserEntity } from '../users/user.entity';
 import {
   UserSeasonPassEntity,
   SEASON_PASS_TIERS,
@@ -114,46 +115,42 @@ export class SeasonPassService {
     return { claimed: true, tier, track, reward };
   }
 
-  /** 골드 패스 구매 (보석 차감) — 원자적 처리로 Race Condition 방지 */
+  /** 골드 패스 구매 (보석 차감) — 트랜잭션으로 원자성 보장 */
   async purchaseGoldPass(userId: string) {
     const seasonId = await this.seasonsService.getCurrentSeasonId();
     if (!seasonId) throw new BadRequestException('활성 시즌이 없습니다.');
 
     await this.getOrCreatePass(userId, seasonId);
 
-    // 1단계: hasGoldPass = false인 경우에만 true로 변경 (원자적)
-    const passResult = await this.passRepo
-      .createQueryBuilder()
-      .update()
-      .set({ hasGoldPass: true })
-      .where('"userId" = :userId AND "seasonId" = :seasonId AND "hasGoldPass" = false', { userId, seasonId })
-      .execute();
-
-    if (!passResult.affected || passResult.affected === 0) {
-      throw new BadRequestException('이미 골드 패스를 보유하고 있습니다.');
-    }
-
-    // 2단계: 보석 차감 (잔액 부족 시 패스 구매 롤백)
-    const gemResult = await this.passRepo.manager
-      .getRepository('users')
-      .createQueryBuilder()
-      .update()
-      .set({ gems: () => `gems - ${GOLD_PASS_GEM_PRICE}` })
-      .where('id = :userId AND gems >= :price', { userId, price: GOLD_PASS_GEM_PRICE })
-      .execute();
-
-    if (!gemResult.affected || gemResult.affected === 0) {
-      // 보석 부족 → 패스 구매 롤백
-      await this.passRepo
+    return this.passRepo.manager.transaction(async (em) => {
+      // 1단계: 보석 차감 먼저 (잔액 부족 시 트랜잭션 전체 롤백)
+      const gemResult = await em
+        .getRepository(UserEntity)
         .createQueryBuilder()
         .update()
-        .set({ hasGoldPass: false })
-        .where('"userId" = :userId AND "seasonId" = :seasonId', { userId, seasonId })
+        .set({ gems: () => `gems - ${GOLD_PASS_GEM_PRICE}` })
+        .where('id = :userId AND gems >= :price', { userId, price: GOLD_PASS_GEM_PRICE })
         .execute();
-      throw new BadRequestException('보석이 부족합니다.');
-    }
 
-    return { purchased: true, gemsSpent: GOLD_PASS_GEM_PRICE };
+      if (!gemResult.affected || gemResult.affected === 0) {
+        throw new BadRequestException('보석이 부족합니다.');
+      }
+
+      // 2단계: 패스 구매 상태 변경 (이미 보유 시 트랜잭션 전체 롤백)
+      const passResult = await em
+        .getRepository(UserSeasonPassEntity)
+        .createQueryBuilder()
+        .update()
+        .set({ hasGoldPass: true })
+        .where('"userId" = :userId AND "seasonId" = :seasonId AND "hasGoldPass" = false', { userId, seasonId })
+        .execute();
+
+      if (!passResult.affected || passResult.affected === 0) {
+        throw new BadRequestException('이미 골드 패스를 보유하고 있습니다.');
+      }
+
+      return { purchased: true, gemsSpent: GOLD_PASS_GEM_PRICE };
+    });
   }
 
   private async getOrCreatePass(userId: string, seasonId: string): Promise<UserSeasonPassEntity> {

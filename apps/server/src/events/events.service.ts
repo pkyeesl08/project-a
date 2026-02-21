@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
 import { NeighborhoodEventEntity } from './neighborhood-event.entity';
@@ -106,6 +106,18 @@ export class EventsService {
 
   /** 이벤트 종료 처리 및 보상 지급 */
   async finalizeEvent(eventId: string) {
+    // 원자적 상태 변경 — 동시 요청 중 한 번만 성공하여 중복 보상 지급 방지
+    const updateResult = await this.eventRepo
+      .createQueryBuilder()
+      .update()
+      .set({ isActive: false })
+      .where('id = :id AND "isActive" = true', { id: eventId })
+      .execute();
+
+    if (!updateResult.affected || updateResult.affected === 0) {
+      throw new ConflictException('이미 종료된 이벤트이거나 존재하지 않습니다.');
+    }
+
     const event = await this.eventRepo.findOne({ where: { id: eventId } });
     if (!event) throw new NotFoundException('이벤트를 찾을 수 없습니다.');
 
@@ -122,9 +134,6 @@ export class EventsService {
       await this.usersService.addElo(winners[i].userId, eloReward);
       rewards.push({ userId: winners[i].userId, rank: i + 1, eloReward });
     }
-
-    event.isActive = false;
-    await this.eventRepo.save(event);
 
     return { finalized: true, rewards };
   }

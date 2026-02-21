@@ -19,6 +19,15 @@ function safeLimit(raw: string | number, def = 50): number {
   return Number.isFinite(n) ? Math.max(1, Math.min(100, n)) : def;
 }
 
+/** UUID v4 형식 검증 */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function validateScopeId(scopeId: string | undefined): string {
+  if (!scopeId || !UUID_RE.test(scopeId)) {
+    throw new BadRequestException('scopeId는 유효한 UUID 형식이어야 합니다.');
+  }
+  return scopeId;
+}
+
 @Controller('external')
 export class ExternalController {
   constructor(private externalService: ExternalService) {}
@@ -48,7 +57,7 @@ export class ExternalController {
     @Query('scopeId') scopeId: string,
     @Query('limit') limit = '50',
   ) {
-    return ok(await this.externalService.getLolRanking(scope, scopeId, safeLimit(limit)));
+    return ok(await this.externalService.getLolRanking(scope, validateScopeId(scopeId), safeLimit(limit)));
   }
 
   /* ── 메이플스토리 ── */
@@ -76,7 +85,7 @@ export class ExternalController {
     @Query('scopeId') scopeId: string,
     @Query('limit') limit = '50',
   ) {
-    return ok(await this.externalService.getMapleRanking(scope, scopeId, safeLimit(limit)));
+    return ok(await this.externalService.getMapleRanking(scope, validateScopeId(scopeId), safeLimit(limit)));
   }
 
   /* ── FC 온라인 ── */
@@ -129,7 +138,7 @@ export class ExternalController {
     @Query('scopeId') scopeId: string,
     @Query('limit') limit = '50',
   ) {
-    return ok(await this.externalService.getPubgRanking(scope, scopeId, safeLimit(limit)));
+    return ok(await this.externalService.getPubgRanking(scope, validateScopeId(scopeId), safeLimit(limit)));
   }
 
   /* ── Steam ── */
@@ -157,7 +166,7 @@ export class ExternalController {
     @Query('scopeId') scopeId: string,
     @Query('limit') limit = '50',
   ) {
-    return ok(await this.externalService.getSteamRanking(scope, scopeId, safeLimit(limit)));
+    return ok(await this.externalService.getSteamRanking(scope, validateScopeId(scopeId), safeLimit(limit)));
   }
 
   /* ── 범용 ── */

@@ -265,6 +265,13 @@ export class AvatarService {
       throw new BadRequestException('결제 시스템이 준비 중입니다. 관리자에게 문의하세요.');
     }
 
+    // 누적 보석 상한 검증 (50,000)
+    const MAX_GEMS = 50_000;
+    const current = await this.usersRepo.findOne({ where: { id: userId }, select: ['gems'] });
+    if ((current?.gems ?? 0) + amount > MAX_GEMS) {
+      throw new BadRequestException(`보석 최대 보유 한도(${MAX_GEMS})를 초과합니다.`);
+    }
+
     await this.usersRepo.increment({ id: userId }, 'gems', amount);
     const user = await this.usersRepo.findOne({ where: { id: userId } });
     return { gems: (user?.gems) ?? 0 };
@@ -272,11 +279,17 @@ export class AvatarService {
 
   /** 코인 지급 (게임 완료/미션 보상 등 내부용) */
   async addCoins(userId: string, amount: number) {
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 1_000_000) {
+      throw new BadRequestException('유효하지 않은 코인 수량입니다.');
+    }
     await this.usersRepo.increment({ id: userId }, 'coins', amount);
   }
 
   /** 보석 지급 (출석/시즌패스/이벤트 보상 등 내부용) */
   async addGems(userId: string, amount: number) {
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 100_000) {
+      throw new BadRequestException('유효하지 않은 보석 수량입니다.');
+    }
     await this.usersRepo.increment({ id: userId }, 'gems', amount);
   }
 

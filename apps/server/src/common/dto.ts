@@ -1,5 +1,5 @@
 import {
-  IsString, IsNumber, IsOptional, IsBoolean,
+  IsString, IsNumber, IsOptional, IsBoolean, IsUrl,
   Min, Max, MinLength, MaxLength, Matches, IsObject, IsIn, IsInt,
 } from 'class-validator';
 
@@ -39,7 +39,11 @@ export class UpdateProfileDto {
   nickname?: string;
 
   @IsOptional() @IsBoolean() isPublic?: boolean;
-  @IsOptional() @IsString()  profileImage?: string;
+
+  @IsOptional()
+  @IsUrl({}, { message: '유효한 이미지 URL이어야 합니다.' })
+  @MaxLength(500, { message: '이미지 URL은 500자 이하여야 합니다.' })
+  profileImage?: string;
 }
 
 export class CheckNicknameDto {
