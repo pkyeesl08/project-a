@@ -23,6 +23,7 @@ import { NotificationsModule } from './notifications/notification.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { SeasonPassModule } from './season-pass/season-pass.module';
 import { GachaModule } from './gacha/gacha.module';
+import { BoardsModule } from './boards/boards.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { GachaModule } from './gacha/gacha.module';
     AttendanceModule,
     SeasonPassModule,
     GachaModule,
+    BoardsModule,
   ],
 })
 export class AppModule implements NestModule {

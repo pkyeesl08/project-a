@@ -629,6 +629,93 @@ class ApiClient {
       remaining: number;
     }>('/gacha/pull', { method: 'POST', body: JSON.stringify({ count }) });
   }
+
+  // ── 동네 게임 게시판 ──────────────────────────────────────
+
+  getBoardPosts(params: { category?: string; regionId?: string; page?: number; limit?: number } = {}) {
+    const q = new URLSearchParams();
+    if (params.category) q.set('category', params.category);
+    if (params.regionId) q.set('regionId', params.regionId);
+    if (params.page) q.set('page', String(params.page));
+    if (params.limit) q.set('limit', String(params.limit));
+    return this.request<{
+      posts: BoardPost[];
+      total: number;
+      page: number;
+      limit: number;
+    }>(`/boards?${q}`);
+  }
+
+  getBoardPost(postId: string) {
+    return this.request<BoardPost>(`/boards/${postId}`);
+  }
+
+  createBoardPost(data: {
+    category: 'general' | 'party';
+    regionId?: string;
+    title: string;
+    content: string;
+    gameType?: string;
+    maxPlayers?: number;
+  }) {
+    return this.request<BoardPost>('/boards', { method: 'POST', body: JSON.stringify(data) });
+  }
+
+  deleteBoardPost(postId: string) {
+    return this.request<{ deleted: boolean }>(`/boards/${postId}`, { method: 'DELETE' });
+  }
+
+  joinParty(postId: string) {
+    return this.request<{ joined: boolean; currentPlayers: string[]; isFull: boolean }>(
+      `/boards/${postId}/join`, { method: 'POST' },
+    );
+  }
+
+  leaveParty(postId: string) {
+    return this.request<{ left: boolean; currentPlayers: string[] }>(
+      `/boards/${postId}/leave`, { method: 'POST' },
+    );
+  }
+
+  getBoardComments(postId: string) {
+    return this.request<BoardComment[]>(`/boards/${postId}/comments`);
+  }
+
+  createBoardComment(postId: string, content: string) {
+    return this.request<BoardComment>(
+      `/boards/${postId}/comments`, { method: 'POST', body: JSON.stringify({ content }) },
+    );
+  }
+
+  deleteBoardComment(commentId: string) {
+    return this.request<{ deleted: boolean }>(`/boards/comments/${commentId}`, { method: 'DELETE' });
+  }
+}
+
+export interface BoardPost {
+  id: string;
+  userId: string;
+  regionId: string | null;
+  category: 'general' | 'party';
+  title: string;
+  content?: string;
+  gameType: string | null;
+  maxPlayers: number | null;
+  currentPlayers: string[];
+  partyStatus: 'open' | 'closed' | null;
+  createdAt: string;
+  updatedAt: string;
+  user: { id: string; nickname: string; profileImage: string | null };
+}
+
+export interface BoardComment {
+  id: string;
+  postId: string;
+  userId: string;
+  content: string;
+  isDeleted: boolean;
+  createdAt: string;
+  user: { id: string; nickname: string; profileImage: string | null };
 }
 
 export const api = new ApiClient();

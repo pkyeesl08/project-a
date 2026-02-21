@@ -19,6 +19,9 @@ import EndlessModePage from './pages/EndlessModePage';
 import ChallengeLinkPage from './pages/ChallengeLinkPage';
 import SeasonPassPage from './pages/SeasonPassPage';
 import GachaPage from './pages/GachaPage';
+import BoardPage from './pages/BoardPage';
+import BoardPostPage from './pages/BoardPostPage';
+import BoardWritePage from './pages/BoardWritePage';
 
 /** 로그인이 필요한 라우트 — 미로그인 시 /register로 리다이렉트 */
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -50,6 +53,11 @@ export default function App() {
         <Route path="/rankings" element={<RankingsPage />} />
         <Route path="/rankings/external" element={<ExternalRankingPage />} />
         <Route path="/map" element={<MapPage />} />
+        <Route path="/board" element={<BoardPage />} />
+        <Route path="/board/:id" element={<BoardPostPage />} />
+        <Route path="/board/write" element={
+          <PrivateRoute><BoardWritePage /></PrivateRoute>
+        } />
         <Route path="/battle" element={
           <PrivateRoute><BattlePage /></PrivateRoute>
         } />

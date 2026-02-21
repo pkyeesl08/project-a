@@ -7,6 +7,7 @@ const tabs = [
   { path: '/', label: '홈', icon: '🏠' },
   { path: '/games', label: '게임', icon: '🎮' },
   { path: '/rankings', label: '랭킹', icon: '🏆' },
+  { path: '/board', label: '게시판', icon: '📌' },
   { path: '/map', label: '지도', icon: '🗺️' },
   { path: '/battle', label: '대전', icon: '⚔️' },
   { path: '/profile', label: '프로필', icon: '👤' },
