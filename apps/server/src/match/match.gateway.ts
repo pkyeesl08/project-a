@@ -4,6 +4,9 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
+import { Inject } from '@nestjs/common';
+import Redis from 'ioredis';
+import { REDIS_CLIENT } from '../redis/redis.module';
 
 interface QueuedPlayer {
   socketId: string;
@@ -16,6 +19,12 @@ interface QueuedPlayer {
 
 /** 허용된 게임 액션 화이트리스트 */
 const VALID_GAME_ACTIONS = new Set(['tap', 'swipe', 'hold', 'release', 'score', 'result']);
+
+/** 매칭 대기 최대 시간 (30초) */
+const MATCH_QUEUE_TIMEOUT_MS = 30_000;
+
+/** Redis에 저장할 매칭 기록 TTL (1시간) */
+const MATCH_RECORD_TTL_SEC = 3600;
 
 const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173';
 
@@ -30,7 +39,30 @@ export class MatchGateway implements OnGatewayConnection, OnGatewayDisconnect {
   /** 소켓ID → 인증된 userId 매핑 */
   private socketUserMap = new Map<string, string>();
 
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly jwtService: JwtService,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
+  ) {
+    // 5초마다 타임아웃된 큐 플레이어 제거
+    setInterval(() => this.pruneTimedOutQueue(), 5000);
+  }
+
+  /** 30초 초과 대기자 큐에서 제거 후 클라이언트에 알림 */
+  private pruneTimedOutQueue() {
+    const now = Date.now();
+    const timedOut: QueuedPlayer[] = [];
+    this.matchQueue = this.matchQueue.filter(p => {
+      if (now - p.joinedAt > MATCH_QUEUE_TIMEOUT_MS) {
+        timedOut.push(p);
+        return false;
+      }
+      return true;
+    });
+    for (const p of timedOut) {
+      const socket = this.server?.sockets.sockets.get(p.socketId);
+      socket?.emit('match:timeout', { message: '매칭 대기 시간이 초과되었습니다. 다시 시도해주세요.' });
+    }
+  }
 
   handleConnection(client: Socket) {
     // JWT 토큰 검증 (handshake.auth.token 또는 Authorization 헤더)
@@ -159,7 +191,7 @@ export class MatchGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
   }
 
-  private tryMatch(player: QueuedPlayer) {
+  private async tryMatch(player: QueuedPlayer) {
     const opponent = this.matchQueue.find(
       p => p.socketId !== player.socketId &&
         p.userId !== player.userId &&
@@ -193,6 +225,13 @@ export class MatchGateway implements OnGatewayConnection, OnGatewayDisconnect {
       gameType: player.gameType,
       readyCount: 0,
     });
+
+    // Redis에 매칭 기록 저장 (games.service.ts에서 PvP 결과 검증용)
+    await this.redis.set(
+      `pvp_match:${matchId}`,
+      JSON.stringify({ players: [player.userId, opponent.userId], gameType: player.gameType }),
+      'EX', MATCH_RECORD_TTL_SEC,
+    );
 
     playerSocket.emit('match:found', {
       matchId,

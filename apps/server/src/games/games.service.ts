@@ -156,6 +156,19 @@ export class GamesService {
     let newElo = user.eloRating;
 
     if (data.mode === 'pvp' && data.opponentId) {
+      // matchId 기반으로 실제 매칭된 상대인지 Redis에서 검증
+      if (!data.matchId) {
+        throw new BadRequestException('PvP 게임 결과 제출에는 matchId가 필요합니다.');
+      }
+      const matchRaw = await this.redis.get(`pvp_match:${data.matchId}`);
+      if (!matchRaw) {
+        throw new BadRequestException('유효하지 않거나 만료된 matchId입니다.');
+      }
+      const matchRecord = JSON.parse(matchRaw) as { players: string[] };
+      if (!matchRecord.players.includes(userId) || !matchRecord.players.includes(data.opponentId)) {
+        throw new BadRequestException('matchId와 플레이어 정보가 일치하지 않습니다.');
+      }
+
       const opponent = await this.usersService.findById(data.opponentId);
       if (opponent && data.opponentId !== userId) {
         const playerWon = data.metadata?.won === true;

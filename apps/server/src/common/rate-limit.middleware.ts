@@ -10,9 +10,14 @@ export class RateLimitMiddleware implements NestMiddleware {
 
   async use(req: Request, res: Response, next: NextFunction) {
     try {
-      const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0] || req.ip || 'unknown';
+      // 실제 TCP 연결 IP 사용 (X-Forwarded-For 조작 방지)
+      // 인증된 유저인 경우 userId 기반 Rate Limit 적용
+      const jwtUserId = (req as Request & { user?: { userId?: string } }).user?.userId;
+      const realIp = req.socket?.remoteAddress ?? 'unknown';
+      const identity = jwtUserId ? `uid:${jwtUserId}` : `ip:${realIp}`;
+
       const path = req.path.replace(/\/[0-9a-f-]{36}/gi, '/:id'); // UUID 정규화
-      const key = `rate:${ip}:${path}`;
+      const key = `rate:${identity}:${path}`;
       const limit = 60;
       const windowSec = 60;
 

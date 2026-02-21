@@ -15,18 +15,6 @@ export class RegionsService {
   ) {}
 
   async verifyRegion(userId: string, latitude: number, longitude: number) {
-    // 7일 쿨다운 체크
-    const user = await this.usersService.findById(userId);
-    if (user?.regionChangedAt) {
-      const daysSince = (Date.now() - new Date(user.regionChangedAt).getTime()) / (1000 * 60 * 60 * 24);
-      if (daysSince < REGION_CHANGE_COOLDOWN_DAYS) {
-        const remainingDays = Math.ceil(REGION_CHANGE_COOLDOWN_DAYS - daysSince);
-        throw new BadRequestException(
-          `동네 변경은 ${remainingDays}일 후에 가능합니다. (쿨다운: ${REGION_CHANGE_COOLDOWN_DAYS}일)`,
-        );
-      }
-    }
-
     // 위도/경도로 가장 가까운 동네 찾기
     const region = await this.regionsRepo
       .createQueryBuilder('region')
@@ -46,11 +34,22 @@ export class RegionsService {
       throw new BadRequestException(`${region.name} 인증 가능 범위를 벗어났습니다. (${distance.toFixed(1)}km)`);
     }
 
-    // 유저의 주 동네 업데이트 + 변경 일시 기록
-    await this.usersService.updateProfile(userId, {
-      primaryRegionId: region.id,
-      regionChangedAt: new Date(),
-    });
+    // 쿨다운 체크 + 업데이트를 원자적으로 처리 (Race Condition 방지)
+    const updated = await this.usersService.atomicUpdateRegion(
+      userId, region.id, REGION_CHANGE_COOLDOWN_DAYS,
+    );
+
+    if (!updated) {
+      // 현재 남은 쿨다운 일수 계산
+      const user = await this.usersService.findById(userId);
+      const daysSince = user?.regionChangedAt
+        ? (Date.now() - new Date(user.regionChangedAt).getTime()) / (1000 * 60 * 60 * 24)
+        : REGION_CHANGE_COOLDOWN_DAYS;
+      const remainingDays = Math.ceil(REGION_CHANGE_COOLDOWN_DAYS - daysSince);
+      throw new BadRequestException(
+        `동네 변경은 ${remainingDays}일 후에 가능합니다. (쿨다운: ${REGION_CHANGE_COOLDOWN_DAYS}일)`,
+      );
+    }
 
     return {
       regionId: region.id,

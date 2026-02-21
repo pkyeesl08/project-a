@@ -64,6 +64,28 @@ export class UsersService {
     return user;
   }
 
+  /**
+   * GPS 동네 인증 — 쿨다운 체크와 업데이트를 원자적으로 처리
+   * @returns true: 성공 / false: 쿨다운 중
+   */
+  async atomicUpdateRegion(
+    userId: string,
+    regionId: string,
+    cooldownDays: number,
+  ): Promise<boolean> {
+    const cooldownDate = new Date(Date.now() - cooldownDays * 86400 * 1000);
+    const result = await this.usersRepo
+      .createQueryBuilder()
+      .update(UserEntity)
+      .set({ primaryRegionId: regionId, regionChangedAt: new Date() })
+      .where(
+        'id = :userId AND ("regionChangedAt" IS NULL OR "regionChangedAt" < :cooldownDate)',
+        { userId, cooldownDate },
+      )
+      .execute();
+    return (result.affected ?? 0) > 0;
+  }
+
   async updateElo(userId: string, newRating: number): Promise<void> {
     // ELO 범위 클램프 (0 ~ 10,000)
     const clampedRating = Math.max(0, Math.min(10000, newRating));
