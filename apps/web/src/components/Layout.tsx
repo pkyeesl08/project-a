@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Outlet, NavLink } from 'react-router-dom';
+import { Outlet, NavLink, Link } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { useNotificationStore } from '../stores/notificationStore';
 
@@ -9,7 +9,6 @@ const tabs = [
   { path: '/rankings', label: '랭킹', icon: '🏆' },
   { path: '/board', label: '게시판', icon: '📌' },
   { path: '/map', label: '지도', icon: '🗺️' },
-  { path: '/battle', label: '대전', icon: '⚔️' },
   { path: '/profile', label: '프로필', icon: '👤' },
 ];
 
@@ -111,6 +110,21 @@ export default function Layout() {
           className="fixed inset-0 z-40"
           onClick={() => setPanelOpen(false)}
         />
+      )}
+
+      {/* 동네 미인증 유도 배너 — 로그인했지만 동네 인증 안 된 경우만 표시 */}
+      {user && !user.regionName && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex items-center justify-between">
+          <p className="text-xs text-amber-800 font-medium">
+            📍 동네 인증하면 내 동네 랭킹에 도전할 수 있어요!
+          </p>
+          <Link
+            to="/onboarding"
+            className="text-xs font-bold text-amber-700 underline flex-shrink-0 ml-2"
+          >
+            인증하기
+          </Link>
+        </div>
       )}
 
       {/* Content */}

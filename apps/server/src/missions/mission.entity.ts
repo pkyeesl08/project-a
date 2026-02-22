@@ -27,13 +27,13 @@ export const MISSION_DEFINITIONS: Record<MissionType, {
     icon: '🎮',
   },
   [MissionType.WIN_2_PVP]: {
-    title: 'PvP 챌린저',
-    description: 'PvP 경기에서 2번 승리하세요',
-    targetValue: 2,
+    title: '무한 도전자',
+    description: 'Endless 모드를 1회 플레이하세요',
+    targetValue: 1,
     rewardElo: 20,
     rewardCoins: 300,
     rewardXp: 80,
-    icon: '⚔️',
+    icon: '♾️',
   },
   [MissionType.NEW_HIGHSCORE]: {
     title: '기록 경신자',

@@ -74,6 +74,7 @@ export class MissionsService {
     mode: string;
     isNewHighScore: boolean;
     won?: boolean;
+    metadata?: Record<string, unknown>;
   }) {
     const date = this.today();
     await this.getDailyMissions(userId); // 없으면 생성
@@ -93,7 +94,8 @@ export class MissionsService {
           break;
 
         case MissionType.WIN_2_PVP:
-          if (data.mode === 'pvp' && data.won) increment = 1;
+          // PvP 제거 후 Endless 모드 달성 미션으로 전환
+          if (data.metadata?.subMode === 'endless') increment = 1;
           break;
 
         case MissionType.NEW_HIGHSCORE:

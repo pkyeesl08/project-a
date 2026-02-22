@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, BoardPost } from '../lib/api';
 import { useAuthStore } from '../stores/authStore';
@@ -102,22 +102,42 @@ export default function BoardPage() {
   const isLoggedIn = useAuthStore(s => s.isLoggedIn);
   const user = useAuthStore(s => s.user);
 
-  const [tab, setTab]       = useState<Tab>('general');
-  const [posts, setPosts]   = useState<BoardPost[]>([]);
-  const [total, setTotal]   = useState(0);
-  const [page, setPage]     = useState(1);
-  const [loading, setLoading] = useState(false);
+  const [tab, setTab]           = useState<Tab>('general');
+  const [posts, setPosts]       = useState<BoardPost[]>([]);
+  const [total, setTotal]       = useState(0);
+  const [page, setPage]         = useState(1);
+  const [loading, setLoading]   = useState(false);
   const [selectedGame, setSelectedGame] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchInput, setSearchInput]   = useState('');
+  const [searchQuery, setSearchQuery]   = useState('');
 
   const regionId = user?.primaryRegionId;
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchPosts = useCallback(async (cat: Tab, p: number, reset: boolean) => {
+  // searchInput 입력 300ms 뒤에 서버 검색 실행
+  const handleSearchChange = (value: string) => {
+    setSearchInput(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setSearchQuery(value);
+      setPage(1);
+    }, 300);
+  };
+
+  const fetchPosts = useCallback(async (cat: Tab, p: number, reset: boolean, q?: string, game?: string) => {
     setLoading(true);
     try {
-      const res = await api.getBoardPosts({ category: cat, regionId, page: p, limit: 20 });
-      setPosts(prev => reset ? res.posts : [...prev, ...res.posts]);
-      setTotal(res.total);
+      const res = await api.getBoardPosts({
+        category: cat,
+        regionId,
+        page: p,
+        limit: 20,
+        q: q?.trim() || undefined,
+      });
+      // 게임 필터는 클라이언트사이드 (서버에 gameType 필터 API가 없을 경우 fallback)
+      const filtered = game ? res.posts.filter(po => po.gameType === game) : res.posts;
+      setPosts(prev => reset ? filtered : [...prev, ...filtered]);
+      setTotal(q?.trim() || game ? filtered.length : res.total);
     } catch {
       // silent
     } finally {
@@ -125,24 +145,33 @@ export default function BoardPage() {
     }
   }, [regionId]);
 
+  // 탭 변경 시 초기화
   useEffect(() => {
     setPage(1);
     setSelectedGame('');
+    setSearchInput('');
+    setSearchQuery('');
     fetchPosts(tab, 1, true);
   }, [tab, fetchPosts]);
+
+  // 검색어 변경 시 재조회
+  useEffect(() => {
+    fetchPosts(tab, 1, true, searchQuery, selectedGame);
+  }, [searchQuery]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 게임 필터 변경 시 재조회
+  useEffect(() => {
+    setPage(1);
+    fetchPosts(tab, 1, true, searchQuery, selectedGame);
+  }, [selectedGame]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleLoadMore = () => {
     const next = page + 1;
     setPage(next);
-    fetchPosts(tab, next, false);
+    fetchPosts(tab, next, false, searchQuery, selectedGame);
   };
 
-  const filteredPosts = posts
-    .filter(p => !selectedGame || p.gameType === selectedGame)
-    .filter(p => !searchQuery.trim() || p.title.toLowerCase().includes(searchQuery.toLowerCase())
-      || p.user.nickname.toLowerCase().includes(searchQuery.toLowerCase()));
-
-  const hasMore = posts.length < total && !selectedGame && !searchQuery;
+  const hasMore = posts.length < total && !searchQuery && !selectedGame;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -179,100 +208,80 @@ export default function BoardPage() {
         </div>
       </div>
 
-      {/* 검색바 */}
-      <div className="bg-white border-b border-gray-100 px-4 py-2">
-        <div className="flex items-center gap-2 bg-gray-100 rounded-xl px-3 py-2">
-          <span className="text-gray-400 text-sm">🔍</span>
+      {/* 검색 바 */}
+      <div className="bg-white border-b border-gray-100 px-4 py-2.5">
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 text-sm">🔍</span>
           <input
-            type="text"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="제목 또는 닉네임 검색..."
-            className="flex-1 bg-transparent text-sm text-gray-700 placeholder-gray-400
-                       focus:outline-none"
+            type="search"
+            value={searchInput}
+            onChange={e => handleSearchChange(e.target.value)}
+            placeholder="게시글 검색..."
+            className="w-full pl-8 pr-4 py-2 bg-gray-100 rounded-xl text-sm
+                       focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
-          {searchQuery && (
-            <button onClick={() => setSearchQuery('')} className="text-gray-400 text-xs">✕</button>
+          {searchInput && (
+            <button
+              onClick={() => handleSearchChange('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 text-sm"
+            >✕</button>
           )}
         </div>
       </div>
 
-      {/* 파티 탭 — 게임 필터 칩 */}
+      {/* 파티 탭: 게임 필터 */}
       {tab === 'party' && (
-        <div className="bg-white border-b border-gray-100 px-4 py-2.5">
-          <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
-            {/* 전체 */}
+        <div className="bg-white border-b border-gray-100 px-4 py-2.5 flex gap-1.5 overflow-x-auto scrollbar-hide">
+          <button
+            onClick={() => setSelectedGame('')}
+            className={`flex-shrink-0 text-xs font-bold px-3 py-1.5 rounded-full transition-colors ${
+              !selectedGame ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-500'
+            }`}
+          >
+            전체
+          </button>
+          {EXTERNAL_GAMES.map(g => (
             <button
-              onClick={() => setSelectedGame('')}
-              className={`shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${
-                selectedGame === '' ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-500'
+              key={g.key}
+              onClick={() => setSelectedGame(prev => prev === g.key ? '' : g.key)}
+              className={`flex-shrink-0 text-xs font-bold px-3 py-1.5 rounded-full transition-colors ${
+                selectedGame === g.key
+                  ? `${g.activeBg} text-white`
+                  : `${g.bg} ${g.text}`
               }`}
             >
-              📋 전체
+              {g.icon} {g.label}
             </button>
-            {EXTERNAL_GAMES.map(g => {
-              const isActive = selectedGame === g.key;
-              return (
-                <button
-                  key={g.key}
-                  onClick={() => setSelectedGame(isActive ? '' : g.key)}
-                  className={`shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${
-                    isActive ? `${g.activeBg} text-white` : `${g.bg} ${g.text}`
-                  }`}
-                >
-                  <span>{g.icon}</span>
-                  <span>{g.label}</span>
-                </button>
-              );
-            })}
-          </div>
+          ))}
         </div>
       )}
 
-      {/* 목록 */}
-      <div className="px-4 py-3 flex flex-col gap-2">
-        {loading && posts.length === 0 ? (
-          <div className="flex flex-col items-center py-16 text-gray-300">
-            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mb-3" />
-            <p className="text-sm">불러오는 중...</p>
+      {/* 게시글 목록 */}
+      <div className="p-4 space-y-2">
+        {loading && posts.length === 0 && (
+          <div className="text-center py-12 text-gray-400 text-sm">불러오는 중...</div>
+        )}
+        {!loading && posts.length === 0 && (
+          <div className="text-center py-12 text-gray-400 text-sm">
+            {searchQuery ? `"${searchQuery}" 검색 결과가 없어요` : '게시글이 없어요. 첫 글을 남겨보세요!'}
           </div>
-        ) : filteredPosts.length === 0 ? (
-          <div className="flex flex-col items-center py-16 text-gray-300">
-            <p className="text-4xl mb-3">{tab === 'party' ? '🎮' : '📋'}</p>
-            <p className="text-sm">
-              {selectedGame ? `${getGameTag(selectedGame)?.label ?? selectedGame} 파티가 없어요` : '아직 게시글이 없어요'}
-            </p>
-            {isLoggedIn && !selectedGame && (
-              <button
-                onClick={() => navigate('/board/write')}
-                className="mt-4 text-primary text-sm font-bold underline"
-              >
-                첫 글 작성하기
-              </button>
-            )}
-          </div>
-        ) : (
-          <>
-            {filteredPosts.map(p => (
-              <PostCard
-                key={p.id}
-                post={p}
-                onClick={() => navigate(`/board/${p.id}`)}
-              />
-            ))}
+        )}
+        {posts.map(post => (
+          <PostCard
+            key={post.id}
+            post={post}
+            onClick={() => navigate(`/board/${post.id}`)}
+          />
+        ))}
 
-            {hasMore && (
-              <button
-                onClick={handleLoadMore}
-                disabled={loading}
-                className="w-full py-3 text-sm text-gray-400 font-medium
-                           bg-white rounded-2xl border border-gray-100
-                           disabled:opacity-50"
-              >
-                {loading ? '불러오는 중...' : '더 보기'}
-              </button>
-            )}
-          </>
+        {hasMore && (
+          <button
+            onClick={handleLoadMore}
+            disabled={loading}
+            className="w-full py-3 text-sm text-gray-400 font-medium active:scale-95 transition-transform disabled:opacity-50"
+          >
+            {loading ? '불러오는 중...' : '더 보기'}
+          </button>
         )}
       </div>
     </div>

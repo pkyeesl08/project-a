@@ -175,9 +175,15 @@ export default function HomePage() {
                     )}
                   </button>
                 ) : (
-                  <div className="flex-shrink-0 text-right">
+                  <div className="flex-shrink-0 flex flex-col items-end gap-1">
                     <p className="text-xs text-gray-300 font-bold">🪙{m.rewardCoins ?? 150}</p>
-                    <p className="text-[10px] text-gray-200">+{m.rewardElo}ELO</p>
+                    <Link
+                      to="/games"
+                      onClick={e => e.stopPropagation()}
+                      className="text-[10px] text-primary font-bold underline"
+                    >
+                      하러 가기→
+                    </Link>
                   </div>
                 )}
               </div>

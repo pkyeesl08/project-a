@@ -9,7 +9,6 @@ import GamesPage from './pages/GamesPage';
 import GamePlayPage from './pages/GamePlayPage';
 import RankingsPage from './pages/RankingsPage';
 import MapPage from './pages/MapPage';
-import BattlePage from './pages/BattlePage';
 import ProfilePage from './pages/ProfilePage';
 import RegisterPage from './pages/RegisterPage';
 import OnboardingPage from './pages/OnboardingPage';
@@ -64,9 +63,6 @@ export default function App() {
         } />
         <Route path="/board/:id/edit" element={
           <PrivateRoute><BoardEditPage /></PrivateRoute>
-        } />
-        <Route path="/battle" element={
-          <PrivateRoute><BattlePage /></PrivateRoute>
         } />
         <Route path="/profile" element={
           <PrivateRoute><ProfilePage /></PrivateRoute>

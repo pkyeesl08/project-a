@@ -495,9 +495,11 @@ function ResultView({ config, score, gameType, gameMode, scoreTimeline, challeng
           </div>
         </div>
         {result?.coinReward != null && (
-          <p className="text-center text-xs text-white/40 mt-3 pt-3 border-t border-white/10">
-            🪙 +{result.coinReward} 코인 획득
-          </p>
+          <div className="flex items-center justify-center gap-3 mt-3 pt-3 border-t border-white/10">
+            <p className="text-xs text-white/40">🪙 +{result.coinReward} 코인</p>
+            <span className="text-white/20">·</span>
+            <p className="text-xs text-white/40">⚡ +{result.xpReward ?? 10} XP</p>
+          </div>
         )}
       </div>
 

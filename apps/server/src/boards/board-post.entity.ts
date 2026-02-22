@@ -64,6 +64,10 @@ export class BoardPostEntity {
   @Column({ type: 'boolean', default: false })
   isDeleted: boolean;
 
+  /** 신고 5건 이상 시 자동 숨김 */
+  @Column({ type: 'boolean', default: false })
+  isHidden: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 

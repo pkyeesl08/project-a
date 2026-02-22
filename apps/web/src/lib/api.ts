@@ -632,12 +632,13 @@ class ApiClient {
 
   // ── 동네 게임 게시판 ──────────────────────────────────────
 
-  getBoardPosts(params: { category?: string; regionId?: string; page?: number; limit?: number } = {}) {
+  getBoardPosts(params: { category?: string; regionId?: string; page?: number; limit?: number; q?: string } = {}) {
     const q = new URLSearchParams();
     if (params.category) q.set('category', params.category);
     if (params.regionId) q.set('regionId', params.regionId);
     if (params.page) q.set('page', String(params.page));
     if (params.limit) q.set('limit', String(params.limit));
+    if (params.q) q.set('q', params.q);
     return this.request<{
       posts: BoardPost[];
       total: number;

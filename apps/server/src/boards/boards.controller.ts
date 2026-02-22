@@ -19,12 +19,14 @@ export class BoardsController {
     @Query('regionId') regionId?: string,
     @Query('page') page = '1',
     @Query('limit') limit = '20',
+    @Query('q') q?: string,
   ) {
     return ok(await this.boardsService.getPosts({
       category,
       regionId,
       page: parseInt(page),
       limit: parseInt(limit),
+      q,
     }));
   }
 

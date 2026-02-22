@@ -5,10 +5,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { BoardPostEntity, BoardCategory, PartyStatus } from './board-post.entity';
 import { BoardCommentEntity } from './board-comment.entity';
+import { BoardReportEntity } from './board-report.entity';
 
 const MAX_TITLE_LEN   = 100;
 const MAX_CONTENT_LEN = 2000;
 const MAX_COMMENT_LEN = 500;
+const AUTO_HIDE_THRESHOLD = 5; // 신고 5건 이상 시 자동 숨김
 
 @Injectable()
 export class BoardsService {
@@ -17,6 +19,8 @@ export class BoardsService {
     private postsRepo: Repository<BoardPostEntity>,
     @InjectRepository(BoardCommentEntity)
     private commentsRepo: Repository<BoardCommentEntity>,
+    @InjectRepository(BoardReportEntity)
+    private reportsRepo: Repository<BoardReportEntity>,
   ) {}
 
   /* ── 게시글 목록 ─────────────────────────────────────────── */
@@ -26,6 +30,7 @@ export class BoardsService {
     regionId?: string;
     page?: number;
     limit?: number;
+    q?: string;
   }) {
     const page  = Math.max(1, opts.page ?? 1);
     const limit = Math.max(1, Math.min(50, opts.limit ?? 20));
@@ -39,7 +44,7 @@ export class BoardsService {
         'p.createdAt', 'p.updatedAt',
         'u.id', 'u.nickname', 'u.profileImage',
       ])
-      .where('p.isDeleted = false')
+      .where('p.isDeleted = false AND p.isHidden = false')
       .orderBy('p.createdAt', 'DESC')
       .skip((page - 1) * limit)
       .take(limit);
@@ -49,6 +54,11 @@ export class BoardsService {
     // 동네 필터: regionId가 주어지면 해당 동네 + 전국(null) 게시글
     if (opts.regionId) {
       qb.andWhere('(p.regionId = :rid OR p.regionId IS NULL)', { rid: opts.regionId });
+    }
+
+    // 제목 검색
+    if (opts.q?.trim()) {
+      qb.andWhere('p.title ILIKE :q', { q: `%${opts.q.trim()}%` });
     }
 
     const [posts, total] = await qb.getManyAndCount();
@@ -64,7 +74,7 @@ export class BoardsService {
       .select([
         'p.id', 'p.category', 'p.title', 'p.content', 'p.regionId',
         'p.gameType', 'p.maxPlayers', 'p.currentPlayers', 'p.partyStatus',
-        'p.createdAt', 'p.updatedAt',
+        'p.likes', 'p.createdAt', 'p.updatedAt',
         'u.id', 'u.nickname', 'u.profileImage',
       ])
       .where('p.id = :id AND p.isDeleted = false', { id: postId })
@@ -138,7 +148,6 @@ export class BoardsService {
   /* ── 파티 참가 / 탈퇴 ───────────────────────────────────── */
 
   async joinParty(postId: string, userId: string) {
-    // 원자적 UPDATE — 배열 미포함 & 상태 OPEN & 인원 미달 시에만
     const post = await this.postsRepo.findOne({ where: { id: postId, isDeleted: false } });
     if (!post) throw new NotFoundException('게시글을 찾을 수 없습니다.');
     if (post.category !== BoardCategory.PARTY) throw new BadRequestException('파티 찾기 게시글이 아닙니다.');
@@ -184,7 +193,7 @@ export class BoardsService {
       .createQueryBuilder('c')
       .leftJoin('c.user', 'u')
       .select([
-        'c.id', 'c.content', 'c.createdAt', 'c.updatedAt', 'c.isDeleted', 'c.isEdited',
+        'c.id', 'c.userId', 'c.content', 'c.createdAt', 'c.updatedAt', 'c.isDeleted', 'c.isEdited',
         'u.id', 'u.nickname', 'u.profileImage',
       ])
       .where('c.postId = :postId', { postId })
@@ -275,8 +284,23 @@ export class BoardsService {
     if (!post) throw new NotFoundException('게시글을 찾을 수 없습니다.');
     if (post.userId === userId) throw new BadRequestException('자신의 게시글은 신고할 수 없습니다.');
     if (!reason?.trim()) throw new BadRequestException('신고 사유를 입력해주세요.');
-    // TODO: 별도 신고 테이블에 저장
-    console.warn(`[REPORT] post=${postId} reporter=${userId} reason=${reason}`);
-    return { reported: true };
+
+    // 중복 신고 방지 (unique index가 처리하지만 친절한 에러 메시지 제공)
+    const existing = await this.reportsRepo.findOne({
+      where: { postId, reporterId: userId },
+    });
+    if (existing) throw new BadRequestException('이미 신고한 게시글입니다.');
+
+    // 신고 저장
+    const report = this.reportsRepo.create({ postId, reporterId: userId, reason: reason.trim() });
+    await this.reportsRepo.save(report);
+
+    // 신고 건수 집계 후 임계치 초과 시 자동 숨김
+    const reportCount = await this.reportsRepo.count({ where: { postId } });
+    if (reportCount >= AUTO_HIDE_THRESHOLD && !post.isHidden) {
+      await this.postsRepo.update(postId, { isHidden: true });
+    }
+
+    return { reported: true, reportCount };
   }
 }
