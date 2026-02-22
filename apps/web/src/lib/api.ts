@@ -690,6 +690,26 @@ class ApiClient {
   deleteBoardComment(commentId: string) {
     return this.request<{ deleted: boolean }>(`/boards/comments/${commentId}`, { method: 'DELETE' });
   }
+
+  updateBoardPost(postId: string, data: { title: string; content: string }) {
+    return this.request<BoardPost>(`/boards/${postId}`, { method: 'PATCH', body: JSON.stringify(data) });
+  }
+
+  likePost(postId: string) {
+    return this.request<{ liked: boolean; likesCount: number }>(`/boards/${postId}/like`, { method: 'POST' });
+  }
+
+  unlikePost(postId: string) {
+    return this.request<{ liked: boolean; likesCount: number }>(`/boards/${postId}/like`, { method: 'DELETE' });
+  }
+
+  reportBoardPost(postId: string, reason: string) {
+    return this.request<{ reported: boolean }>(`/boards/${postId}/report`, { method: 'POST', body: JSON.stringify({ reason }) });
+  }
+
+  updateBoardComment(commentId: string, content: string) {
+    return this.request<BoardComment>(`/boards/comments/${commentId}`, { method: 'PATCH', body: JSON.stringify({ content }) });
+  }
 }
 
 export interface BoardPost {
@@ -703,6 +723,7 @@ export interface BoardPost {
   maxPlayers: number | null;
   currentPlayers: string[];
   partyStatus: 'open' | 'closed' | null;
+  likes: string[];
   createdAt: string;
   updatedAt: string;
   user: { id: string; nickname: string; profileImage: string | null };
@@ -714,8 +735,10 @@ export interface BoardComment {
   userId: string;
   content: string;
   isDeleted: boolean;
+  isEdited: boolean;
   createdAt: string;
-  user: { id: string; nickname: string; profileImage: string | null };
+  updatedAt: string;
+  user: { id: string; nickname: string; profileImage: string | null } | undefined;
 }
 
 export const api = new ApiClient();

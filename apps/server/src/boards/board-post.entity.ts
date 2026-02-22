@@ -57,6 +57,10 @@ export class BoardPostEntity {
 
   // ──────────────────────────────────────────────────────────────
 
+  /** 좋아요 누른 userId 목록 */
+  @Column({ type: 'jsonb', default: [] })
+  likes: string[];
+
   @Column({ type: 'boolean', default: false })
   isDeleted: boolean;
 

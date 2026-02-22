@@ -3,6 +3,9 @@ import { useParams, useNavigate, useSearchParams, useLocation } from 'react-rout
 import { GAME_CONFIGS, GameType, GameConfig } from '@donggamerank/shared';
 import { getGameComponent } from '../games/GameEngine';
 import { api, DailyMission } from '../lib/api';
+import GameTutorialOverlay from '../components/GameTutorialOverlay';
+
+const TUTORIAL_KEY = (gt: string) => `tutorial_seen_${gt}`;
 
 type Phase = 'ready' | 'countdown' | 'playing' | 'result';
 
@@ -36,6 +39,14 @@ export default function GamePlayPage() {
   const [countdown, setCountdown] = useState(3);
   const [score, setScore] = useState(0);
   const [timeLeft, setTimeLeft] = useState(0);
+  const [showTutorial, setShowTutorial] = useState(() =>
+    !localStorage.getItem(TUTORIAL_KEY(gameType ?? '')),
+  );
+
+  const handleTutorialDone = useCallback(() => {
+    localStorage.setItem(TUTORIAL_KEY(gameType ?? ''), '1');
+    setShowTutorial(false);
+  }, [gameType]);
 
   // 도전 모드
   const locationState = location.state as { challengeTarget?: ChallengeTarget; challengeToken?: string } | null;
@@ -137,6 +148,11 @@ export default function GamePlayPage() {
                    flex items-center justify-center text-xl">
         ✕
       </button>
+
+      {/* ── Tutorial (첫 플레이 시) ── */}
+      {phase === 'ready' && showTutorial && (
+        <GameTutorialOverlay config={config} onStart={handleTutorialDone} />
+      )}
 
       {/* ── Ready ── */}
       {phase === 'ready' && (

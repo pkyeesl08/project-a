@@ -22,6 +22,8 @@ import GachaPage from './pages/GachaPage';
 import BoardPage from './pages/BoardPage';
 import BoardPostPage from './pages/BoardPostPage';
 import BoardWritePage from './pages/BoardWritePage';
+import BoardEditPage from './pages/BoardEditPage';
+import NotificationBanner from './components/NotificationBanner';
 
 /** 로그인이 필요한 라우트 — 미로그인 시 /register로 리다이렉트 */
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -46,6 +48,8 @@ export default function App() {
   }, [isLoggedIn, accessToken]);
 
   return (
+    <>
+    <NotificationBanner />
     <Routes>
       <Route element={<Layout />}>
         <Route path="/" element={<HomePage />} />
@@ -57,6 +61,9 @@ export default function App() {
         <Route path="/board/:id" element={<BoardPostPage />} />
         <Route path="/board/write" element={
           <PrivateRoute><BoardWritePage /></PrivateRoute>
+        } />
+        <Route path="/board/:id/edit" element={
+          <PrivateRoute><BoardEditPage /></PrivateRoute>
         } />
         <Route path="/battle" element={
           <PrivateRoute><BattlePage /></PrivateRoute>
@@ -81,5 +88,6 @@ export default function App() {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/onboarding" element={<OnboardingPage />} />
     </Routes>
+    </>
   );
 }

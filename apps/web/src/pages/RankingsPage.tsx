@@ -39,6 +39,8 @@ export default function RankingsPage() {
   const [myRank, setMyRank] = useState<{ regionRank?: number; nationalRank?: number; totalPlayers?: number } | null>(null);
   const [rankings, setRankings] = useState(FALLBACK_RANKINGS);
   const [rankingsLoading, setRankingsLoading] = useState(true);
+  const [season, setSeason] = useState<{ name: string; endDate: string } | null>(null);
+  const [daysLeft, setDaysLeft] = useState<number | null>(null);
 
   useEffect(() => {
     api.getMyRankings().then(setMyRank).catch(() => {});
@@ -46,6 +48,13 @@ export default function RankingsPage() {
       .then(data => { if (data.length > 0) setRankings(data); })
       .catch(() => {})
       .finally(() => setRankingsLoading(false));
+    api.getCurrentSeason()
+      .then(s => {
+        setSeason({ name: s.name, endDate: s.endDate });
+        const diff = new Date(s.endDate).getTime() - Date.now();
+        setDaysLeft(Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24))));
+      })
+      .catch(() => {});
   }, []);
 
   const displayRank = myRank?.regionRank ?? myRank?.nationalRank ?? '—';
@@ -65,6 +74,47 @@ export default function RankingsPage() {
 
   return (
     <div className="p-4">
+      {/* 시즌 종료 카운트다운 */}
+      {season && daysLeft !== null && daysLeft <= 14 && (
+        <div className={`rounded-2xl p-4 mb-4 ${
+          daysLeft <= 3
+            ? 'bg-gradient-to-r from-red-500 to-orange-500'
+            : 'bg-gradient-to-r from-indigo-500 to-purple-600'
+        } text-white`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold opacity-80">🏆 {season.name}</p>
+              <p className="text-lg font-black mt-0.5">
+                {daysLeft === 0 ? '오늘 시즌 종료!' : `${daysLeft}일 후 종료`}
+              </p>
+              <p className="text-xs opacity-70 mt-0.5">
+                {daysLeft <= 3
+                  ? '⚡ 막판 스퍼트! 지금 랭킹을 굳히세요'
+                  : '시즌 보상을 놓치지 마세요. 순위를 확인하세요!'}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-4xl font-black opacity-90">{displayRank}</p>
+              <p className="text-[10px] opacity-60">내 순위</p>
+            </div>
+          </div>
+          {/* TOP 3 보상 미리보기 */}
+          <div className="flex gap-2 mt-3">
+            {[
+              { rank: 1, label: '🥇 1위', reward: '전설 칭호 + 5000코인' },
+              { rank: 2, label: '🥈 2위', reward: '에픽 칭호 + 3000코인' },
+              { rank: 3, label: '🥉 3위', reward: '레어 칭호 + 1500코인' },
+            ].map(r => (
+              <div key={r.rank}
+                className="flex-1 bg-white/15 rounded-xl px-2 py-1.5 text-center">
+                <p className="text-[10px] font-black">{r.label}</p>
+                <p className="text-[9px] opacity-70 leading-tight mt-0.5">{r.reward}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Scope Tabs */}
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-4 overflow-x-auto scrollbar-hide">
         {SCOPES.map((scope, i) => (

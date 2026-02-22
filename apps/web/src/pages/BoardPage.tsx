@@ -108,6 +108,7 @@ export default function BoardPage() {
   const [page, setPage]     = useState(1);
   const [loading, setLoading] = useState(false);
   const [selectedGame, setSelectedGame] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const regionId = user?.primaryRegionId;
 
@@ -136,11 +137,12 @@ export default function BoardPage() {
     fetchPosts(tab, next, false);
   };
 
-  const filteredPosts = selectedGame
-    ? posts.filter(p => p.gameType === selectedGame)
-    : posts;
+  const filteredPosts = posts
+    .filter(p => !selectedGame || p.gameType === selectedGame)
+    .filter(p => !searchQuery.trim() || p.title.toLowerCase().includes(searchQuery.toLowerCase())
+      || p.user.nickname.toLowerCase().includes(searchQuery.toLowerCase()));
 
-  const hasMore = posts.length < total && !selectedGame;
+  const hasMore = posts.length < total && !selectedGame && !searchQuery;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -174,6 +176,24 @@ export default function BoardPage() {
               {TAB_LABELS[t]}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* 검색바 */}
+      <div className="bg-white border-b border-gray-100 px-4 py-2">
+        <div className="flex items-center gap-2 bg-gray-100 rounded-xl px-3 py-2">
+          <span className="text-gray-400 text-sm">🔍</span>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="제목 또는 닉네임 검색..."
+            className="flex-1 bg-transparent text-sm text-gray-700 placeholder-gray-400
+                       focus:outline-none"
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery('')} className="text-gray-400 text-xs">✕</button>
+          )}
         </div>
       </div>
 

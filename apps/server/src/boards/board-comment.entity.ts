@@ -1,6 +1,6 @@
 import {
   Entity, PrimaryGeneratedColumn, Column, CreateDateColumn,
-  Index, ManyToOne, JoinColumn,
+  UpdateDateColumn, Index, ManyToOne, JoinColumn,
 } from 'typeorm';
 import { UserEntity } from '../users/user.entity';
 
@@ -22,8 +22,14 @@ export class BoardCommentEntity {
   @Column({ type: 'boolean', default: false })
   isDeleted: boolean;
 
+  @Column({ type: 'boolean', default: false })
+  isEdited: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
 
   @ManyToOne(() => UserEntity, { eager: false })
   @JoinColumn({ name: 'userId' })

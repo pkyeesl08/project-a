@@ -51,6 +51,12 @@ export default function BoardPostPage() {
   const [loading, setLoading]   = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [partyLoading, setPartyLoading] = useState(false);
+  const [likeLoading, setLikeLoading] = useState(false);
+  const [showReport, setShowReport] = useState(false);
+  const [reportReason, setReportReason] = useState('');
+  const [reporting, setReporting] = useState(false);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editCommentText, setEditCommentText] = useState('');
   const commentRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -126,6 +132,55 @@ export default function BoardPostPage() {
     }
   };
 
+  const handleLike = async () => {
+    if (!id || likeLoading) return;
+    const alreadyLiked = me ? (post?.likes ?? []).includes(me.id) : false;
+    setLikeLoading(true);
+    try {
+      if (alreadyLiked) {
+        const res = await api.unlikePost(id);
+        setPost(prev => prev ? { ...prev, likes: (prev.likes ?? []).filter(uid => uid !== me?.id) } : prev);
+      } else {
+        await api.likePost(id);
+        setPost(prev => prev && me ? { ...prev, likes: [...(prev.likes ?? []), me.id] } : prev);
+      }
+    } catch { /* 무시 */ }
+    finally { setLikeLoading(false); }
+  };
+
+  const handleReport = async () => {
+    if (!id || !reportReason.trim() || reporting) return;
+    setReporting(true);
+    try {
+      await api.reportBoardPost(id, reportReason.trim());
+      setShowReport(false);
+      setReportReason('');
+      alert('신고가 접수되었습니다.');
+    } catch (e: any) {
+      alert(e.message ?? '신고에 실패했습니다.');
+    } finally {
+      setReporting(false);
+    }
+  };
+
+  const startEditComment = (c: BoardComment) => {
+    setEditingCommentId(c.id);
+    setEditCommentText(c.content);
+  };
+
+  const handleSaveEditComment = async (commentId: string) => {
+    if (!editCommentText.trim()) return;
+    try {
+      await api.updateBoardComment(commentId, editCommentText.trim());
+      setComments(prev => prev.map(c =>
+        c.id === commentId ? { ...c, content: editCommentText.trim(), isEdited: true } : c,
+      ));
+      setEditingCommentId(null);
+    } catch (e: any) {
+      alert(e.message ?? '수정에 실패했습니다.');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -136,11 +191,13 @@ export default function BoardPostPage() {
 
   if (!post) return null;
 
-  const isParty  = post.category === 'party';
-  const isMine   = me?.id === post.userId;
-  const isJoined = me ? post.currentPlayers.includes(me.id) : false;
-  const isFull   = post.partyStatus === 'closed';
-  const gameTag  = getGameTag(post.gameType);
+  const isParty    = post.category === 'party';
+  const isMine     = me?.id === post.userId;
+  const isJoined   = me ? post.currentPlayers.includes(me.id) : false;
+  const isFull     = post.partyStatus === 'closed';
+  const gameTag    = getGameTag(post.gameType);
+  const liked      = me ? (post.likes ?? []).includes(me.id) : false;
+  const likesCount = (post.likes ?? []).length;
 
   return (
     <div className="min-h-screen bg-gray-50 pb-32">
@@ -212,15 +269,45 @@ export default function BoardPostPage() {
               <span className="text-xs font-medium text-gray-600">{post.user.nickname}</span>
               <span className="text-xs text-gray-300">{timeAgo(post.createdAt)}</span>
             </div>
-            {isMine && (
-              <button onClick={handleDelete} className="text-xs text-red-400 font-medium">삭제</button>
-            )}
+            <div className="flex items-center gap-2">
+              {isMine ? (
+                <>
+                  <button
+                    onClick={() => navigate(`/board/${id}/edit`)}
+                    className="text-xs text-primary font-medium"
+                  >수정</button>
+                  <button onClick={handleDelete} className="text-xs text-red-400 font-medium">삭제</button>
+                </>
+              ) : isLoggedIn && (
+                <button
+                  onClick={() => setShowReport(true)}
+                  className="text-xs text-gray-300 font-medium"
+                >신고</button>
+              )}
+            </div>
           </div>
 
           <hr className="border-gray-100 mb-3" />
 
           {/* 본문 */}
           <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{post.content}</p>
+
+          {/* 좋아요 */}
+          <div className="flex items-center gap-3 mt-4 pt-3 border-t border-gray-100">
+            <button
+              onClick={handleLike}
+              disabled={!isLoggedIn || likeLoading}
+              className={`flex items-center gap-1.5 text-sm font-bold px-3 py-1.5 rounded-xl
+                          transition-all active:scale-95 disabled:opacity-40 ${
+                liked
+                  ? 'bg-red-50 text-red-500'
+                  : 'bg-gray-100 text-gray-500'
+              }`}
+            >
+              <span>{liked ? '❤️' : '🤍'}</span>
+              <span>{likesCount > 0 ? likesCount : '좋아요'}</span>
+            </button>
+          </div>
         </div>
 
         {/* 댓글 */}
@@ -242,18 +329,47 @@ export default function BoardPostPage() {
                   <div className="flex items-center gap-1.5 mb-0.5">
                     <span className="text-xs font-semibold text-gray-700">{c.user?.nickname}</span>
                     <span className="text-[10px] text-gray-300">{timeAgo(c.createdAt)}</span>
+                    {c.isEdited && <span className="text-[9px] text-gray-300">(수정됨)</span>}
                   </div>
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-xs text-gray-600 leading-relaxed">{c.content}</p>
-                    {!c.isDeleted && me?.id === c.userId && (
-                      <button
-                        onClick={() => handleDeleteComment(c.id)}
-                        className="text-[10px] text-red-300 shrink-0"
-                      >
-                        삭제
-                      </button>
-                    )}
-                  </div>
+                  {editingCommentId === c.id ? (
+                    /* 수정 모드 */
+                    <div className="space-y-1.5">
+                      <textarea
+                        value={editCommentText}
+                        onChange={e => setEditCommentText(e.target.value)}
+                        maxLength={500}
+                        rows={2}
+                        className="w-full bg-gray-100 rounded-lg px-2.5 py-1.5 text-xs resize-none
+                                   focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleSaveEditComment(c.id)}
+                          className="text-[10px] bg-primary text-white px-2.5 py-1 rounded-lg font-bold"
+                        >저장</button>
+                        <button
+                          onClick={() => setEditingCommentId(null)}
+                          className="text-[10px] text-gray-400 px-2 py-1"
+                        >취소</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-xs text-gray-600 leading-relaxed">{c.content}</p>
+                      {!c.isDeleted && me?.id === c.userId && (
+                        <div className="flex gap-1.5 shrink-0">
+                          <button
+                            onClick={() => startEditComment(c)}
+                            className="text-[10px] text-primary"
+                          >수정</button>
+                          <button
+                            onClick={() => handleDeleteComment(c.id)}
+                            className="text-[10px] text-red-300"
+                          >삭제</button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -288,6 +404,45 @@ export default function BoardPostPage() {
           >
             등록
           </button>
+        </div>
+      )}
+
+      {/* 신고 모달 */}
+      {showReport && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-end justify-center"
+          onClick={() => setShowReport(false)}
+        >
+          <div
+            className="bg-white rounded-t-3xl p-6 w-full max-w-md"
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 className="text-base font-black text-gray-900 mb-1">게시글 신고</h3>
+            <p className="text-xs text-gray-400 mb-4">허위·도배·욕설·음란물 등 신고 사유를 입력해주세요.</p>
+            <textarea
+              value={reportReason}
+              onChange={e => setReportReason(e.target.value)}
+              placeholder="신고 사유를 입력하세요..."
+              maxLength={200}
+              rows={3}
+              className="w-full bg-gray-100 rounded-xl px-3 py-2.5 text-sm resize-none
+                         focus:outline-none focus:ring-2 focus:ring-red-300 mb-3"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setShowReport(false); setReportReason(''); }}
+                className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 font-bold text-sm"
+              >취소</button>
+              <button
+                onClick={handleReport}
+                disabled={reporting || !reportReason.trim()}
+                className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold text-sm
+                           active:scale-95 transition-transform disabled:opacity-50"
+              >
+                {reporting ? '신고 중...' : '신고하기'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -217,4 +217,66 @@ export class BoardsService {
     await this.commentsRepo.update(commentId, { isDeleted: true });
     return { deleted: true };
   }
+
+  /* ── 댓글 수정 ──────────────────────────────────────────── */
+
+  async updateComment(commentId: string, userId: string, content: string) {
+    if (!content?.trim() || content.length > MAX_COMMENT_LEN) {
+      throw new BadRequestException(`댓글은 1~${MAX_COMMENT_LEN}자여야 합니다.`);
+    }
+    const comment = await this.commentsRepo.findOne({ where: { id: commentId, isDeleted: false } });
+    if (!comment) throw new NotFoundException('댓글을 찾을 수 없습니다.');
+    if (comment.userId !== userId) throw new ForbiddenException('본인의 댓글만 수정할 수 있습니다.');
+
+    await this.commentsRepo.update(commentId, { content: content.trim(), isEdited: true });
+    return { ...comment, content: content.trim(), isEdited: true };
+  }
+
+  /* ── 게시글 수정 ─────────────────────────────────────────── */
+
+  async updatePost(postId: string, userId: string, data: { title: string; content: string }) {
+    const post = await this.postsRepo.findOne({ where: { id: postId, isDeleted: false } });
+    if (!post) throw new NotFoundException('게시글을 찾을 수 없습니다.');
+    if (post.userId !== userId) throw new ForbiddenException('본인의 게시글만 수정할 수 있습니다.');
+    if (!data.title?.trim() || data.title.length > MAX_TITLE_LEN) {
+      throw new BadRequestException(`제목은 1~${MAX_TITLE_LEN}자여야 합니다.`);
+    }
+    if (!data.content?.trim() || data.content.length > MAX_CONTENT_LEN) {
+      throw new BadRequestException(`내용은 1~${MAX_CONTENT_LEN}자여야 합니다.`);
+    }
+    await this.postsRepo.update(postId, { title: data.title.trim(), content: data.content.trim() });
+    return this.getPost(postId);
+  }
+
+  /* ── 좋아요 / 취소 ───────────────────────────────────────── */
+
+  async likePost(postId: string, userId: string) {
+    const post = await this.postsRepo.findOne({ where: { id: postId, isDeleted: false } });
+    if (!post) throw new NotFoundException('게시글을 찾을 수 없습니다.');
+    const likes = post.likes ?? [];
+    if (likes.includes(userId)) throw new BadRequestException('이미 좋아요를 눌렀습니다.');
+    const newLikes = [...likes, userId];
+    await this.postsRepo.update(postId, { likes: newLikes });
+    return { liked: true, likesCount: newLikes.length };
+  }
+
+  async unlikePost(postId: string, userId: string) {
+    const post = await this.postsRepo.findOne({ where: { id: postId, isDeleted: false } });
+    if (!post) throw new NotFoundException('게시글을 찾을 수 없습니다.');
+    const newLikes = (post.likes ?? []).filter(id => id !== userId);
+    await this.postsRepo.update(postId, { likes: newLikes });
+    return { liked: false, likesCount: newLikes.length };
+  }
+
+  /* ── 신고 ────────────────────────────────────────────────── */
+
+  async reportPost(postId: string, userId: string, reason: string) {
+    const post = await this.postsRepo.findOne({ where: { id: postId, isDeleted: false } });
+    if (!post) throw new NotFoundException('게시글을 찾을 수 없습니다.');
+    if (post.userId === userId) throw new BadRequestException('자신의 게시글은 신고할 수 없습니다.');
+    if (!reason?.trim()) throw new BadRequestException('신고 사유를 입력해주세요.');
+    // TODO: 별도 신고 테이블에 저장
+    console.warn(`[REPORT] post=${postId} reporter=${userId} reason=${reason}`);
+    return { reported: true };
+  }
 }

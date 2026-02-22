@@ -582,13 +582,33 @@ function FriendsTab() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [msg, setMsg] = useState('');
+  const [suggestions, setSuggestions] = useState<Array<{ userId: string; nickname: string; eloRating: number; regionName: string }>>([]);
+  const [requestedIds, setRequestedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     Promise.all([api.getFriends(), api.getFriendRequests()])
       .then(([f, r]) => { setFriends(f); setRequests(r); })
       .catch(() => {})
       .finally(() => setLoading(false));
+
+    // 위치 기반 근처 게이머 추천 (GPS 허용 시)
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(pos => {
+        api.getMapUsers(pos.coords.latitude, pos.coords.longitude, 3)
+          .then((users: any[]) => {
+            setSuggestions(users.slice(0, 6));
+          })
+          .catch(() => {});
+      }, () => {/* 위치 거부 시 조용히 무시 */});
+    }
   }, []);
+
+  const handleSuggestRequest = async (userId: string) => {
+    try {
+      await api.sendFriendRequest(userId);
+      setRequestedIds(prev => new Set([...prev, userId]));
+    } catch { /* 무시 */ }
+  };
 
   const handleAccept = async (requesterId: string) => {
     try {
@@ -660,6 +680,44 @@ function FriendsTab() {
                 </button>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* 동네 게이머 추천 */}
+      {suggestions.length > 0 && (
+        <div>
+          <h3 className="font-bold text-sm mb-2">📍 근처 게이머 추천</h3>
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+            {suggestions.map(u => {
+              const alreadyFriend = friends.some(f => f.userId === u.userId);
+              const requested = requestedIds.has(u.userId);
+              return (
+                <div key={u.userId}
+                  className="shrink-0 bg-white rounded-2xl p-3 shadow-sm border border-gray-100
+                             flex flex-col items-center gap-1.5 w-24 text-center">
+                  <div className="w-10 h-10 bg-gradient-to-br from-primary to-primary-dark
+                                  rounded-full flex items-center justify-center text-lg">🐯</div>
+                  <p className="text-[11px] font-bold text-gray-800 leading-tight line-clamp-1 w-full">
+                    {u.nickname}
+                  </p>
+                  <p className="text-[9px] text-gray-400">{u.regionName}</p>
+                  {alreadyFriend ? (
+                    <span className="text-[9px] text-green-500 font-bold">친구</span>
+                  ) : (
+                    <button
+                      onClick={() => handleSuggestRequest(u.userId)}
+                      disabled={requested}
+                      className={`text-[9px] font-bold px-2 py-0.5 rounded-full transition-colors ${
+                        requested ? 'bg-gray-100 text-gray-400' : 'bg-primary/10 text-primary active:scale-95'
+                      }`}
+                    >
+                      {requested ? '요청됨' : '+ 친구'}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

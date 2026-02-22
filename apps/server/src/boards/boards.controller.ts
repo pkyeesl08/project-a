@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Delete, Body, Param, Query, UseGuards,
+  Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUserId } from '../auth/current-user.decorator';
@@ -86,6 +86,44 @@ export class BoardsController {
     return ok(await this.boardsService.leaveParty(id, userId));
   }
 
+  /* ── 게시글 수정 ── */
+
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard)
+  async updatePost(
+    @Param('id') id: string,
+    @CurrentUserId() userId: string,
+    @Body() body: { title: string; content: string },
+  ) {
+    return ok(await this.boardsService.updatePost(id, userId, body));
+  }
+
+  /* ── 좋아요 / 취소 ── */
+
+  @Post(':id/like')
+  @UseGuards(JwtAuthGuard)
+  async likePost(@Param('id') id: string, @CurrentUserId() userId: string) {
+    return ok(await this.boardsService.likePost(id, userId));
+  }
+
+  @Delete(':id/like')
+  @UseGuards(JwtAuthGuard)
+  async unlikePost(@Param('id') id: string, @CurrentUserId() userId: string) {
+    return ok(await this.boardsService.unlikePost(id, userId));
+  }
+
+  /* ── 신고 ── */
+
+  @Post(':id/report')
+  @UseGuards(JwtAuthGuard)
+  async reportPost(
+    @Param('id') id: string,
+    @CurrentUserId() userId: string,
+    @Body() body: { reason: string },
+  ) {
+    return ok(await this.boardsService.reportPost(id, userId, body.reason));
+  }
+
   /* ── 댓글 목록 ── */
 
   @Get(':id/comments')
@@ -103,6 +141,18 @@ export class BoardsController {
     @Body() body: { content: string },
   ) {
     return ok(await this.boardsService.createComment(id, userId, body.content));
+  }
+
+  /* ── 댓글 수정 ── */
+
+  @Patch('comments/:commentId')
+  @UseGuards(JwtAuthGuard)
+  async updateComment(
+    @Param('commentId') commentId: string,
+    @CurrentUserId() userId: string,
+    @Body() body: { content: string },
+  ) {
+    return ok(await this.boardsService.updateComment(commentId, userId, body.content));
   }
 
   /* ── 댓글 삭제 ── */
