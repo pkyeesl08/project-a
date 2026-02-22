@@ -3,52 +3,30 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { api, BoardPost, BoardComment } from '../lib/api';
 import { useAuthStore } from '../stores/authStore';
 
-const GAME_LABELS: Record<string, string> = {
-  timing_hit: '타이밍 히트', speed_tap: '스피드 탭',
-  lightning_reaction: '번개 반응', balloon_pop: '풍선 터트리기',
-  whack_a_mole: '두더지 잡기', memory_flash: '기억 플래시',
-  color_match: '색깔 맞추기', bigger_number: '큰 숫자',
-  same_picture: '같은 그림', odd_even: '홀짝',
-  reverse_memory: '역순 기억', direction_swipe: '방향 스와이프',
-  stop_the_bar: '바 멈추기', rps_speed: '빠른 가위바위보',
-  sequence_tap: '순서대로 탭', reverse_reaction: '역방향 반응',
-  line_trace: '선 따라가기', target_sniper: '타겟 저격',
-  dark_room_tap: '암실 탭', screw_center: '나사 중심',
-  line_grow: '선 늘리기', dual_precision: '이중 정밀 탭',
-  rapid_aim: '연속 조준', math_speed: '수학 속산',
-  shell_game: '컵 게임', emoji_sort: '이모지 분류', count_more: '더 많이 세기',
-};
+type ExternalGame = { key: string; label: string; icon: string; bg: string; bgLight: string; text: string; border: string };
 
-type GameCategory = 'reaction' | 'puzzle' | 'action' | 'precision' | 'special';
+const EXTERNAL_GAMES: ExternalGame[] = [
+  { key: 'lol',        label: '리그 오브 레전드', icon: '⚔️',  bg: 'bg-blue-500',   bgLight: 'bg-blue-50',   text: 'text-blue-700',   border: 'border-blue-200'   },
+  { key: 'valorant',   label: '발로란트',          icon: '🔫',  bg: 'bg-red-500',    bgLight: 'bg-red-50',    text: 'text-red-700',    border: 'border-red-200'    },
+  { key: 'overwatch',  label: '오버워치 2',        icon: '🛡️',  bg: 'bg-orange-500', bgLight: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200' },
+  { key: 'pubg',       label: '배틀그라운드',      icon: '🪂',  bg: 'bg-yellow-500', bgLight: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200' },
+  { key: 'lost_ark',   label: '로스트아크',        icon: '⚓',  bg: 'bg-amber-500',  bgLight: 'bg-amber-50',  text: 'text-amber-700',  border: 'border-amber-200'  },
+  { key: 'fc_online',  label: 'FC온라인',          icon: '⚽',  bg: 'bg-green-500',  bgLight: 'bg-green-50',  text: 'text-green-700',  border: 'border-green-200'  },
+  { key: 'maplestory', label: '메이플스토리',      icon: '🍁',  bg: 'bg-purple-500', bgLight: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' },
+  { key: 'starcraft',  label: '스타크래프트',      icon: '🚀',  bg: 'bg-indigo-500', bgLight: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200' },
+  { key: 'minecraft',  label: '마인크래프트',      icon: '🧱',  bg: 'bg-emerald-500',bgLight: 'bg-emerald-50',text: 'text-emerald-700',border: 'border-emerald-200'},
+  { key: 'diablo',     label: '디아블로',          icon: '💀',  bg: 'bg-rose-500',   bgLight: 'bg-rose-50',   text: 'text-rose-700',   border: 'border-rose-200'   },
+  { key: 'other',      label: '기타',              icon: '🎮',  bg: 'bg-gray-500',   bgLight: 'bg-gray-50',   text: 'text-gray-600',   border: 'border-gray-200'   },
+];
 
-const GAME_CATEGORY: Record<string, GameCategory> = {
-  timing_hit: 'reaction', speed_tap: 'reaction', lightning_reaction: 'reaction',
-  balloon_pop: 'reaction', whack_a_mole: 'reaction',
-  memory_flash: 'puzzle', color_match: 'puzzle', bigger_number: 'puzzle',
-  same_picture: 'puzzle', odd_even: 'puzzle', reverse_memory: 'puzzle',
-  direction_swipe: 'action', stop_the_bar: 'action', rps_speed: 'action',
-  sequence_tap: 'action', reverse_reaction: 'action',
-  line_trace: 'precision', target_sniper: 'precision', dark_room_tap: 'precision',
-  screw_center: 'precision', line_grow: 'precision', dual_precision: 'precision',
-  rapid_aim: 'precision',
-  math_speed: 'special', shell_game: 'special', emoji_sort: 'special', count_more: 'special',
-};
+const GAME_MAP = new Map(EXTERNAL_GAMES.map(g => [g.key, g]));
 
-const CATEGORY_CONFIG: Record<GameCategory, { icon: string; bg: string; text: string; border: string }> = {
-  reaction:  { icon: '⚡', bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200' },
-  puzzle:    { icon: '🧠', bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' },
-  action:    { icon: '🕹️', bg: 'bg-blue-50',   text: 'text-blue-700',   border: 'border-blue-200'   },
-  precision: { icon: '🎯', bg: 'bg-green-50',  text: 'text-green-700',  border: 'border-green-200'  },
-  special:   { icon: '🌟', bg: 'bg-amber-50',  text: 'text-amber-700',  border: 'border-amber-200'  },
-};
-
-function getGameTag(gameType: string | null | undefined) {
+function getGameTag(gameType: string | null | undefined): ExternalGame | null {
   if (!gameType) return null;
-  const cat = GAME_CATEGORY[gameType];
-  const label = GAME_LABELS[gameType] ?? gameType;
-  if (!cat) return { icon: '🎮', label, bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' };
-  const c = CATEGORY_CONFIG[cat];
-  return { icon: c.icon, label, bg: c.bg, text: c.text, border: c.border };
+  return GAME_MAP.get(gameType) ?? {
+    key: gameType, label: gameType, icon: '🎮',
+    bg: 'bg-gray-500', bgLight: 'bg-gray-50', text: 'text-gray-600', border: 'border-gray-200',
+  };
 }
 
 function timeAgo(dateStr: string) {
@@ -181,16 +159,16 @@ export default function BoardPostPage() {
         <div className="bg-white rounded-2xl p-4 shadow-sm">
           {/* 파티 정보 */}
           {isParty && (
-            <div className={`rounded-xl p-3 mb-3 border ${gameTag ? `${gameTag.bg} ${gameTag.border}` : 'bg-blue-50 border-blue-200'}`}>
+            <div className={`rounded-xl p-3 mb-3 border ${gameTag ? `${gameTag.bgLight} ${gameTag.border}` : 'bg-gray-50 border-gray-200'}`}>
               <div className="flex items-center justify-between">
                 <div>
                   {gameTag && (
                     <span className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full mb-1.5
-                                     ${gameTag.bg} ${gameTag.text} border ${gameTag.border}`}>
+                                     ${gameTag.bgLight} ${gameTag.text} border ${gameTag.border}`}>
                       {gameTag.icon} {gameTag.label}
                     </span>
                   )}
-                  <p className={`text-sm font-bold mt-0.5 ${gameTag ? gameTag.text : 'text-blue-800'}`}>
+                  <p className={`text-sm font-bold mt-0.5 ${gameTag ? gameTag.text : 'text-gray-700'}`}>
                     {post.currentPlayers.length}/{post.maxPlayers}명 참가 중
                     {isFull && <span className="ml-2 text-xs bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded-full font-medium">파티 완성</span>}
                   </p>

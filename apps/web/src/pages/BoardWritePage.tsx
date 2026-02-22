@@ -5,30 +5,28 @@ import { useAuthStore } from '../stores/authStore';
 
 type Category = 'general' | 'party';
 
-const VALID_GAME_TYPES = [
-  'timing_hit', 'speed_tap', 'lightning_reaction', 'balloon_pop', 'whack_a_mole',
-  'memory_flash', 'color_match', 'bigger_number', 'same_picture', 'odd_even',
-  'reverse_memory', 'direction_swipe', 'stop_the_bar', 'rps_speed',
-  'sequence_tap', 'reverse_reaction', 'line_trace', 'target_sniper',
-  'dark_room_tap', 'screw_center', 'line_grow', 'dual_precision', 'rapid_aim',
-  'math_speed', 'shell_game', 'emoji_sort', 'count_more',
-];
-
-const GAME_LABELS: Record<string, string> = {
-  timing_hit: '타이밍 히트', speed_tap: '스피드 탭',
-  lightning_reaction: '번개 반응', balloon_pop: '풍선 터트리기',
-  whack_a_mole: '두더지 잡기', memory_flash: '기억 플래시',
-  color_match: '색깔 맞추기', bigger_number: '큰 숫자',
-  same_picture: '같은 그림', odd_even: '홀짝',
-  reverse_memory: '역순 기억', direction_swipe: '방향 스와이프',
-  stop_the_bar: '바 멈추기', rps_speed: '빠른 가위바위보',
-  sequence_tap: '순서대로 탭', reverse_reaction: '역방향 반응',
-  line_trace: '선 따라가기', target_sniper: '타겟 저격',
-  dark_room_tap: '암실 탭', screw_center: '나사 중심',
-  line_grow: '선 늘리기', dual_precision: '이중 정밀 탭',
-  rapid_aim: '연속 조준', math_speed: '수학 속산',
-  shell_game: '컵 게임', emoji_sort: '이모지 분류', count_more: '더 많이 세기',
+type ExternalGame = {
+  key: string;
+  label: string;
+  icon: string;
+  bg: string;
+  text: string;
+  activeBg: string;
 };
+
+const EXTERNAL_GAMES: ExternalGame[] = [
+  { key: 'lol',        label: '리그 오브 레전드', icon: '⚔️',  bg: 'bg-blue-100',   text: 'text-blue-700',   activeBg: 'bg-blue-500'   },
+  { key: 'valorant',   label: '발로란트',          icon: '🔫',  bg: 'bg-red-100',    text: 'text-red-700',    activeBg: 'bg-red-500'    },
+  { key: 'overwatch',  label: '오버워치 2',        icon: '🛡️',  bg: 'bg-orange-100', text: 'text-orange-700', activeBg: 'bg-orange-500' },
+  { key: 'pubg',       label: '배틀그라운드',      icon: '🪂',  bg: 'bg-yellow-100', text: 'text-yellow-700', activeBg: 'bg-yellow-500' },
+  { key: 'lost_ark',   label: '로스트아크',        icon: '⚓',  bg: 'bg-amber-100',  text: 'text-amber-700',  activeBg: 'bg-amber-500'  },
+  { key: 'fc_online',  label: 'FC온라인',          icon: '⚽',  bg: 'bg-green-100',  text: 'text-green-700',  activeBg: 'bg-green-500'  },
+  { key: 'maplestory', label: '메이플스토리',      icon: '🍁',  bg: 'bg-purple-100', text: 'text-purple-700', activeBg: 'bg-purple-500' },
+  { key: 'starcraft',  label: '스타크래프트',      icon: '🚀',  bg: 'bg-indigo-100', text: 'text-indigo-700', activeBg: 'bg-indigo-500' },
+  { key: 'minecraft',  label: '마인크래프트',      icon: '🧱',  bg: 'bg-emerald-100',text: 'text-emerald-700',activeBg: 'bg-emerald-500'},
+  { key: 'diablo',     label: '디아블로',          icon: '💀',  bg: 'bg-rose-100',   text: 'text-rose-700',   activeBg: 'bg-rose-500'   },
+  { key: 'other',      label: '기타',              icon: '🎮',  bg: 'bg-gray-100',   text: 'text-gray-600',   activeBg: 'bg-gray-500'   },
+];
 
 export default function BoardWritePage() {
   const navigate = useNavigate();
@@ -38,13 +36,13 @@ export default function BoardWritePage() {
 
   const defaultCategory = (params.get('category') as Category) ?? 'general';
 
-  const [category, setCategory]   = useState<Category>(defaultCategory);
-  const [title, setTitle]         = useState('');
-  const [content, setContent]     = useState('');
-  const [gameType, setGameType]   = useState('');
+  const [category, setCategory]     = useState<Category>(defaultCategory);
+  const [title, setTitle]           = useState('');
+  const [content, setContent]       = useState('');
+  const [gameType, setGameType]     = useState('');
   const [maxPlayers, setMaxPlayers] = useState(4);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError]         = useState('');
+  const [error, setError]           = useState('');
 
   if (!isLoggedIn) {
     navigate('/register', { replace: true });
@@ -54,7 +52,7 @@ export default function BoardWritePage() {
   const handleSubmit = async () => {
     if (!title.trim()) { setError('제목을 입력해주세요.'); return; }
     if (!content.trim()) { setError('내용을 입력해주세요.'); return; }
-    if (category === 'party' && !gameType) { setError('게임 종류를 선택해주세요.'); return; }
+    if (category === 'party' && !gameType) { setError('게임을 선택해주세요.'); return; }
 
     setError('');
     setSubmitting(true);
@@ -74,6 +72,8 @@ export default function BoardWritePage() {
       setSubmitting(false);
     }
   };
+
+  const selectedGame = EXTERNAL_GAMES.find(g => g.key === gameType);
 
   return (
     <div className="min-h-screen bg-gray-50 pb-10">
@@ -101,11 +101,9 @@ export default function BoardWritePage() {
             {(['general', 'party'] as Category[]).map(cat => (
               <button
                 key={cat}
-                onClick={() => setCategory(cat)}
+                onClick={() => { setCategory(cat); setGameType(''); }}
                 className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-colors ${
-                  category === cat
-                    ? 'bg-primary text-white'
-                    : 'bg-gray-100 text-gray-500'
+                  category === cat ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500'
                 }`}
               >
                 {cat === 'general' ? '📋 통합 게시판' : '🎮 파티 찾기'}
@@ -116,37 +114,44 @@ export default function BoardWritePage() {
 
         {/* 파티 찾기 옵션 */}
         {category === 'party' && (
-          <div className="bg-white rounded-2xl p-4 shadow-sm space-y-3">
+          <div className="bg-white rounded-2xl p-4 shadow-sm space-y-4">
             <p className="text-xs text-gray-500 font-medium">파티 설정</p>
 
-            {/* 게임 종류 */}
+            {/* 게임 선택 */}
             <div>
-              <label className="text-xs text-gray-400 block mb-1">게임 종류 *</label>
-              <select
-                value={gameType}
-                onChange={e => setGameType(e.target.value)}
-                className="w-full bg-gray-100 rounded-xl px-3 py-2.5 text-sm text-gray-700
-                           focus:outline-none focus:ring-2 focus:ring-primary/30"
-              >
-                <option value="">선택해주세요</option>
-                {VALID_GAME_TYPES.map(g => (
-                  <option key={g} value={g}>{GAME_LABELS[g] ?? g}</option>
-                ))}
-              </select>
+              <label className="text-xs text-gray-400 block mb-2">게임 선택 *</label>
+              <div className="flex flex-wrap gap-2">
+                {EXTERNAL_GAMES.map(g => {
+                  const isSelected = gameType === g.key;
+                  return (
+                    <button
+                      key={g.key}
+                      onClick={() => setGameType(g.key)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold
+                                  border transition-all active:scale-95 ${
+                        isSelected
+                          ? `${g.activeBg} text-white border-transparent`
+                          : `${g.bg} ${g.text} border-transparent`
+                      }`}
+                    >
+                      <span>{g.icon}</span>
+                      <span>{g.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {/* 최대 인원 */}
             <div>
               <label className="text-xs text-gray-400 block mb-1">최대 인원</label>
               <div className="flex gap-2">
-                {[2, 3, 4, 6, 8].map(n => (
+                {[2, 3, 4, 5, 6].map(n => (
                   <button
                     key={n}
                     onClick={() => setMaxPlayers(n)}
                     className={`flex-1 py-2 rounded-xl text-sm font-bold transition-colors ${
-                      maxPlayers === n
-                        ? 'bg-primary text-white'
-                        : 'bg-gray-100 text-gray-500'
+                      maxPlayers === n ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500'
                     }`}
                   >
                     {n}명
@@ -166,8 +171,8 @@ export default function BoardWritePage() {
               value={title}
               onChange={e => setTitle(e.target.value)}
               placeholder={category === 'party'
-                ? '예: 스피드탭 파티원 구합니다 (3/4)'
-                : '예: 타이밍히트 공략 공유해요!'}
+                ? (selectedGame ? `${selectedGame.label} 파티원 구합니다!` : '예: 같이 랭크 돌 분 구해요!')
+                : '예: 동네 게임 후기 공유해요!'}
               maxLength={100}
               className="w-full bg-gray-100 rounded-xl px-3 py-2.5 text-sm
                          focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -181,7 +186,7 @@ export default function BoardWritePage() {
               value={content}
               onChange={e => setContent(e.target.value)}
               placeholder={category === 'party'
-                ? '파티 모집 조건, 연락 방법, 플레이 시간대 등을 적어주세요.'
+                ? '티어, 플레이 스타일, 연락 방법, 플레이 시간대 등을 적어주세요.'
                 : '자유롭게 작성해주세요. (공략, 질문, 잡담 모두 환영!)'}
               rows={8}
               maxLength={2000}

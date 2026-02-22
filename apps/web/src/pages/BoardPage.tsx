@@ -4,78 +4,33 @@ import { api, BoardPost } from '../lib/api';
 import { useAuthStore } from '../stores/authStore';
 
 type Tab = 'general' | 'party';
-type GameCategory = 'reaction' | 'puzzle' | 'action' | 'precision' | 'special';
 
 const TAB_LABELS: Record<Tab, string> = {
   general: '📋 통합',
   party:   '🎮 파티찾기',
 };
 
-const GAME_LABELS: Record<string, string> = {
-  timing_hit:         '타이밍 히트',
-  speed_tap:          '스피드 탭',
-  lightning_reaction: '번개 반응',
-  balloon_pop:        '풍선 터트리기',
-  whack_a_mole:       '두더지 잡기',
-  memory_flash:       '기억 플래시',
-  color_match:        '색깔 맞추기',
-  bigger_number:      '큰 숫자',
-  same_picture:       '같은 그림',
-  odd_even:           '홀짝',
-  reverse_memory:     '역순 기억',
-  direction_swipe:    '방향 스와이프',
-  stop_the_bar:       '바 멈추기',
-  rps_speed:          '빠른 가위바위보',
-  sequence_tap:       '순서대로 탭',
-  reverse_reaction:   '역방향 반응',
-  line_trace:         '선 따라가기',
-  target_sniper:      '타겟 저격',
-  dark_room_tap:      '암실 탭',
-  screw_center:       '나사 중심',
-  line_grow:          '선 늘리기',
-  dual_precision:     '이중 정밀 탭',
-  rapid_aim:          '연속 조준',
-  math_speed:         '수학 속산',
-  shell_game:         '컵 게임',
-  emoji_sort:         '이모지 분류',
-  count_more:         '더 많이 세기',
-};
+type ExternalGame = { key: string; label: string; icon: string; bg: string; text: string; activeBg: string };
 
-const GAME_CATEGORY: Record<string, GameCategory> = {
-  timing_hit: 'reaction', speed_tap: 'reaction', lightning_reaction: 'reaction',
-  balloon_pop: 'reaction', whack_a_mole: 'reaction',
-  memory_flash: 'puzzle', color_match: 'puzzle', bigger_number: 'puzzle',
-  same_picture: 'puzzle', odd_even: 'puzzle', reverse_memory: 'puzzle',
-  direction_swipe: 'action', stop_the_bar: 'action', rps_speed: 'action',
-  sequence_tap: 'action', reverse_reaction: 'action',
-  line_trace: 'precision', target_sniper: 'precision', dark_room_tap: 'precision',
-  screw_center: 'precision', line_grow: 'precision', dual_precision: 'precision',
-  rapid_aim: 'precision',
-  math_speed: 'special', shell_game: 'special', emoji_sort: 'special', count_more: 'special',
-};
-
-type CategoryConfig = { label: string; icon: string; bg: string; text: string; activeBg: string };
-const CATEGORY_CONFIG: Record<GameCategory, CategoryConfig> = {
-  reaction:  { label: '반응/속도', icon: '⚡', bg: 'bg-orange-100', text: 'text-orange-700', activeBg: 'bg-orange-500' },
-  puzzle:    { label: '퍼즐/논리', icon: '🧠', bg: 'bg-purple-100', text: 'text-purple-700', activeBg: 'bg-purple-500' },
-  action:    { label: '액션/모션', icon: '🕹️', bg: 'bg-blue-100',   text: 'text-blue-700',   activeBg: 'bg-blue-500'   },
-  precision: { label: '정밀/집중', icon: '🎯', bg: 'bg-green-100',  text: 'text-green-700',  activeBg: 'bg-green-500'  },
-  special:   { label: '특수/파티', icon: '🌟', bg: 'bg-amber-100',  text: 'text-amber-700',  activeBg: 'bg-amber-500'  },
-};
-
-const CATEGORY_FILTERS: Array<{ key: '' | GameCategory; label: string; icon: string }> = [
-  { key: '', label: '전체', icon: '📋' },
-  { key: 'reaction',  label: '반응/속도', icon: '⚡' },
-  { key: 'puzzle',    label: '퍼즐/논리', icon: '🧠' },
-  { key: 'action',    label: '액션/모션', icon: '🕹️' },
-  { key: 'precision', label: '정밀/집중', icon: '🎯' },
-  { key: 'special',   label: '특수/파티', icon: '🌟' },
+const EXTERNAL_GAMES: ExternalGame[] = [
+  { key: 'lol',        label: '리그 오브 레전드', icon: '⚔️',  bg: 'bg-blue-100',   text: 'text-blue-700',   activeBg: 'bg-blue-500'   },
+  { key: 'valorant',   label: '발로란트',          icon: '🔫',  bg: 'bg-red-100',    text: 'text-red-700',    activeBg: 'bg-red-500'    },
+  { key: 'overwatch',  label: '오버워치 2',        icon: '🛡️',  bg: 'bg-orange-100', text: 'text-orange-700', activeBg: 'bg-orange-500' },
+  { key: 'pubg',       label: '배틀그라운드',      icon: '🪂',  bg: 'bg-yellow-100', text: 'text-yellow-700', activeBg: 'bg-yellow-500' },
+  { key: 'lost_ark',   label: '로스트아크',        icon: '⚓',  bg: 'bg-amber-100',  text: 'text-amber-700',  activeBg: 'bg-amber-500'  },
+  { key: 'fc_online',  label: 'FC온라인',          icon: '⚽',  bg: 'bg-green-100',  text: 'text-green-700',  activeBg: 'bg-green-500'  },
+  { key: 'maplestory', label: '메이플스토리',      icon: '🍁',  bg: 'bg-purple-100', text: 'text-purple-700', activeBg: 'bg-purple-500' },
+  { key: 'starcraft',  label: '스타크래프트',      icon: '🚀',  bg: 'bg-indigo-100', text: 'text-indigo-700', activeBg: 'bg-indigo-500' },
+  { key: 'minecraft',  label: '마인크래프트',      icon: '🧱',  bg: 'bg-emerald-100',text: 'text-emerald-700',activeBg: 'bg-emerald-500'},
+  { key: 'diablo',     label: '디아블로',          icon: '💀',  bg: 'bg-rose-100',   text: 'text-rose-700',   activeBg: 'bg-rose-500'   },
+  { key: 'other',      label: '기타',              icon: '🎮',  bg: 'bg-gray-100',   text: 'text-gray-600',   activeBg: 'bg-gray-500'   },
 ];
 
-function gameTagClasses(gameType: string): string {
-  const cat = GAME_CATEGORY[gameType];
-  if (!cat) return 'bg-blue-100 text-blue-700';
-  return `${CATEGORY_CONFIG[cat].bg} ${CATEGORY_CONFIG[cat].text}`;
+const GAME_MAP = new Map(EXTERNAL_GAMES.map(g => [g.key, g]));
+
+function getGameTag(gameType: string | null | undefined): ExternalGame | null {
+  if (!gameType) return null;
+  return GAME_MAP.get(gameType) ?? { key: gameType, label: gameType, icon: '🎮', bg: 'bg-gray-100', text: 'text-gray-600', activeBg: 'bg-gray-500' };
 }
 
 function timeAgo(dateStr: string) {
@@ -107,11 +62,14 @@ function PostCard({ post, onClick }: { post: BoardPost; onClick: () => void }) {
             }`}>
               {isFull ? '파티 완성' : '모집 중'}
             </span>
-            {post.gameType && (
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${gameTagClasses(post.gameType)}`}>
-                {GAME_CATEGORY[post.gameType] ? `${CATEGORY_CONFIG[GAME_CATEGORY[post.gameType]].icon} ` : ''}{GAME_LABELS[post.gameType] ?? post.gameType}
-              </span>
-            )}
+            {post.gameType && (() => {
+              const g = getGameTag(post.gameType);
+              return g ? (
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${g.bg} ${g.text}`}>
+                  {g.icon} {g.label}
+                </span>
+              ) : null;
+            })()}
             {post.maxPlayers && (
               <span className="text-[10px] text-gray-400 ml-auto">
                 {post.currentPlayers.length}/{post.maxPlayers}명
@@ -149,7 +107,7 @@ export default function BoardPage() {
   const [total, setTotal]   = useState(0);
   const [page, setPage]     = useState(1);
   const [loading, setLoading] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<'' | GameCategory>('');
+  const [selectedGame, setSelectedGame] = useState('');
 
   const regionId = user?.primaryRegionId;
 
@@ -168,7 +126,7 @@ export default function BoardPage() {
 
   useEffect(() => {
     setPage(1);
-    setSelectedCategory('');
+    setSelectedGame('');
     fetchPosts(tab, 1, true);
   }, [tab, fetchPosts]);
 
@@ -178,11 +136,11 @@ export default function BoardPage() {
     fetchPosts(tab, next, false);
   };
 
-  const filteredPosts = selectedCategory
-    ? posts.filter(p => p.gameType && GAME_CATEGORY[p.gameType] === selectedCategory)
+  const filteredPosts = selectedGame
+    ? posts.filter(p => p.gameType === selectedGame)
     : posts;
 
-  const hasMore = posts.length < total && !selectedCategory;
+  const hasMore = posts.length < total && !selectedGame;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -219,29 +177,31 @@ export default function BoardPage() {
         </div>
       </div>
 
-      {/* 파티 탭 — 게임 카테고리 필터 칩 */}
+      {/* 파티 탭 — 게임 필터 칩 */}
       {tab === 'party' && (
         <div className="bg-white border-b border-gray-100 px-4 py-2.5">
           <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
-            {CATEGORY_FILTERS.map(f => {
-              const isActive = selectedCategory === f.key;
-              const catCfg = f.key ? CATEGORY_CONFIG[f.key] : null;
+            {/* 전체 */}
+            <button
+              onClick={() => setSelectedGame('')}
+              className={`shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${
+                selectedGame === '' ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-500'
+              }`}
+            >
+              📋 전체
+            </button>
+            {EXTERNAL_GAMES.map(g => {
+              const isActive = selectedGame === g.key;
               return (
                 <button
-                  key={f.key}
-                  onClick={() => setSelectedCategory(f.key)}
+                  key={g.key}
+                  onClick={() => setSelectedGame(isActive ? '' : g.key)}
                   className={`shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${
-                    isActive
-                      ? catCfg
-                        ? `${catCfg.activeBg} text-white`
-                        : 'bg-gray-700 text-white'
-                      : catCfg
-                        ? `${catCfg.bg} ${catCfg.text}`
-                        : 'bg-gray-100 text-gray-500'
+                    isActive ? `${g.activeBg} text-white` : `${g.bg} ${g.text}`
                   }`}
                 >
-                  <span>{f.icon}</span>
-                  <span>{f.label}</span>
+                  <span>{g.icon}</span>
+                  <span>{g.label}</span>
                 </button>
               );
             })}
@@ -260,9 +220,9 @@ export default function BoardPage() {
           <div className="flex flex-col items-center py-16 text-gray-300">
             <p className="text-4xl mb-3">{tab === 'party' ? '🎮' : '📋'}</p>
             <p className="text-sm">
-              {selectedCategory ? `${CATEGORY_CONFIG[selectedCategory].label} 파티가 없어요` : '아직 게시글이 없어요'}
+              {selectedGame ? `${getGameTag(selectedGame)?.label ?? selectedGame} 파티가 없어요` : '아직 게시글이 없어요'}
             </p>
-            {isLoggedIn && !selectedCategory && (
+            {isLoggedIn && !selectedGame && (
               <button
                 onClick={() => navigate('/board/write')}
                 className="mt-4 text-primary text-sm font-bold underline"
