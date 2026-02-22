@@ -86,6 +86,18 @@ export class BoardsController {
     return ok(await this.boardsService.leaveParty(id, userId));
   }
 
+  /* ── 댓글 수정 (※ ':id' 패턴보다 반드시 먼저 등록해야 라우트 충돌 방지) ── */
+
+  @Patch('comments/:commentId')
+  @UseGuards(JwtAuthGuard)
+  async updateComment(
+    @Param('commentId') commentId: string,
+    @CurrentUserId() userId: string,
+    @Body() body: { content: string },
+  ) {
+    return ok(await this.boardsService.updateComment(commentId, userId, body.content));
+  }
+
   /* ── 게시글 수정 ── */
 
   @Patch(':id')
@@ -141,18 +153,6 @@ export class BoardsController {
     @Body() body: { content: string },
   ) {
     return ok(await this.boardsService.createComment(id, userId, body.content));
-  }
-
-  /* ── 댓글 수정 ── */
-
-  @Patch('comments/:commentId')
-  @UseGuards(JwtAuthGuard)
-  async updateComment(
-    @Param('commentId') commentId: string,
-    @CurrentUserId() userId: string,
-    @Body() body: { content: string },
-  ) {
-    return ok(await this.boardsService.updateComment(commentId, userId, body.content));
   }
 
   /* ── 댓글 삭제 ── */

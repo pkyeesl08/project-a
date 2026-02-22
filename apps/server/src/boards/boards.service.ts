@@ -184,7 +184,7 @@ export class BoardsService {
       .createQueryBuilder('c')
       .leftJoin('c.user', 'u')
       .select([
-        'c.id', 'c.content', 'c.createdAt', 'c.isDeleted',
+        'c.id', 'c.content', 'c.createdAt', 'c.updatedAt', 'c.isDeleted', 'c.isEdited',
         'u.id', 'u.nickname', 'u.profileImage',
       ])
       .where('c.postId = :postId', { postId })
