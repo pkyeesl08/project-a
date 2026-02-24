@@ -59,14 +59,12 @@ function validateRawScore(gameType: GameType, rawScore: number): void {
   }
 }
 
-/** 게임 완료 시 지급 코인 (솔로 기본값) — 하루 20판 기준 최대 600 코인 */
+/** 게임 완료 시 지급 코인 (솔로) — 하루 20판 기준 최대 600 코인 */
 const COIN_REWARD_SOLO = 30;
-/** PvP 승리 추가 보너스 */
-const COIN_REWARD_PVP_WIN = 50;
 /** 게임 완료 시 지급 계정 XP */
-const XP_PER_GAME = 10;
-/** PvP 승리 추가 XP */
-const XP_PER_PVP_WIN = 20;
+const XP_PER_GAME = 15;
+/** 신기록 달성 보너스 XP */
+const XP_BONUS_HIGHSCORE = 20;
 
 @Injectable()
 export class GamesService {
@@ -229,8 +227,7 @@ export class GamesService {
     }
 
     // 코인 지급 (게임 완료 기본 보상)
-    const coinReward = COIN_REWARD_SOLO +
-      (data.mode === 'pvp' && data.metadata?.won === true ? COIN_REWARD_PVP_WIN : 0);
+    const coinReward = COIN_REWARD_SOLO;
 
     // 챌린지 링크를 통해 도전하여 이긴 경우 → 원본 챌린저에게 알림
     const challengeToken = data.metadata?.challengeToken as string | undefined;
@@ -254,18 +251,20 @@ export class GamesService {
       }).catch(() => {});
     }
 
-    const pvpWon = data.mode === 'pvp' && data.metadata?.won === true;
-    const xpReward = XP_PER_GAME + (pvpWon ? XP_PER_PVP_WIN : 0);
+    const xpReward = XP_PER_GAME + (isNewHighScore ? XP_BONUS_HIGHSCORE : 0);
+
+    // XP 지급 결과 수집 (레벨업 여부 확인)
+    const xpResult = await this.usersService.addXp(userId, xpReward);
 
     Promise.allSettled([
       this.avatarService.addCoins(userId, coinReward),
-      this.usersService.addXp(userId, xpReward),
       this.seasonPassService.addSeasonXp(userId, 'gameComplete'),
       this.missionsService.handleGameResult(userId, {
         gameType: data.gameType,
         mode: data.mode,
         isNewHighScore,
-        won: pvpWon,
+        won: false,
+        metadata: data.metadata,
       }),
       this.achievementsService.checkAfterGame(userId, {
         gameType: data.gameType,
@@ -289,6 +288,10 @@ export class GamesService {
       isNewHighScore,
       seasonId,
       coinReward,
+      xpReward,
+      leveledUp: xpResult.leveledUp,
+      newLevel: xpResult.newLevel,
+      newXp: xpResult.newXp,
     };
   }
 

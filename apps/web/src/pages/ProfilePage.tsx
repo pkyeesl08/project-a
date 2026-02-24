@@ -6,6 +6,29 @@ import { useAvatarStore, FRAME_RING, TITLE_STYLE } from '../stores/avatarStore';
 import { useAuthStore } from '../stores/authStore';
 import { getTier } from '../lib/tier';
 
+/** 서버 레벨 공식과 동일한 클라이언트 계산 */
+const LEVEL_RANGES = [
+  { from: 1,  to: 10,  xpPer: 100  },
+  { from: 10, to: 30,  xpPer: 300  },
+  { from: 30, to: 50,  xpPer: 600  },
+  { from: 50, to: 70,  xpPer: 1200 },
+  { from: 70, to: 90,  xpPer: 2000 },
+  { from: 90, to: 100, xpPer: 5000 },
+] as const;
+
+function calcLevelFromXp(totalXp: number): { level: number; xpIntoLevel: number; xpForNextLevel: number | null } {
+  let remaining = Math.max(0, totalXp);
+  for (const { from, to, xpPer } of LEVEL_RANGES) {
+    const rangeTotal = (to - from) * xpPer;
+    if (remaining < rangeTotal) {
+      const earned = Math.floor(remaining / xpPer);
+      return { level: from + earned, xpIntoLevel: remaining - earned * xpPer, xpForNextLevel: xpPer };
+    }
+    remaining -= rangeTotal;
+  }
+  return { level: 100, xpIntoLevel: 0, xpForNextLevel: null };
+}
+
 type Tab = 'stats' | 'games' | 'achievements' | 'friends' | 'external' | 'trophy';
 
 export default function ProfilePage() {
@@ -36,6 +59,8 @@ export default function ProfilePage() {
   const displayWinRate = profile?.winRate ?? '—';
   const displayStreak = profile?.currentStreak ?? 0;
   const displayBadges: string[] = profile?.badges ?? [];
+  const displayXp = user?.xp ?? profile?.xp ?? 0;
+  const { level: calcedLevel, xpIntoLevel, xpForNextLevel } = calcLevelFromXp(displayXp);
 
   const tier = getTier(displayElo);
 
@@ -77,7 +102,7 @@ export default function ProfilePage() {
                 ✏️ 수정
               </button>
             </div>
-            {/* 칭호 + 티어 */}
+            {/* 칭호 + 티어 + 레벨 */}
             <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
               {activeTitle && (
                 <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${titleCls}`}>
@@ -86,6 +111,9 @@ export default function ProfilePage() {
               )}
               <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/20">
                 {tier.emoji} {tier.name}
+              </span>
+              <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-yellow-400/30 text-yellow-200">
+                ⚡ Lv.{calcedLevel}
               </span>
             </div>
             <div className="flex gap-2 mt-1 flex-wrap">
@@ -127,6 +155,31 @@ export default function ProfilePage() {
               <p className="text-[10px] opacity-70">{stat.label}</p>
             </div>
           ))}
+        </div>
+
+        {/* XP 진행 바 */}
+        <div className="mt-4">
+          <div className="flex justify-between items-center mb-1">
+            <span className="text-xs font-bold text-yellow-200">⚡ Lv.{calcedLevel}</span>
+            {xpForNextLevel != null ? (
+              <span className="text-[10px] text-white/50">
+                {xpIntoLevel.toLocaleString()} / {xpForNextLevel.toLocaleString()} XP
+              </span>
+            ) : (
+              <span className="text-[10px] text-yellow-300 font-bold">MAX LEVEL</span>
+            )}
+          </div>
+          <div className="w-full h-2 bg-white/15 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-yellow-400 to-amber-300 rounded-full transition-all"
+              style={{ width: xpForNextLevel ? `${Math.min(100, (xpIntoLevel / xpForNextLevel) * 100)}%` : '100%' }}
+            />
+          </div>
+          {xpForNextLevel != null && (
+            <p className="text-[10px] text-white/40 text-right mt-0.5">
+              다음 레벨까지 {(xpForNextLevel - xpIntoLevel).toLocaleString()} XP
+            </p>
+          )}
         </div>
 
         {/* Badges */}

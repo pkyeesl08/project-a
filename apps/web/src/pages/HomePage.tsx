@@ -4,6 +4,28 @@ import { GAME_CONFIGS, GameCategory } from '@donggamerank/shared';
 import { api, DailyMission } from '../lib/api';
 import { useAuthStore } from '../stores/authStore';
 import { getTier, getNextTier } from '../lib/tier';
+
+const LEVEL_RANGES = [
+  { from: 1,  to: 10,  xpPer: 100  },
+  { from: 10, to: 30,  xpPer: 300  },
+  { from: 30, to: 50,  xpPer: 600  },
+  { from: 50, to: 70,  xpPer: 1200 },
+  { from: 70, to: 90,  xpPer: 2000 },
+  { from: 90, to: 100, xpPer: 5000 },
+] as const;
+
+function calcLevelFromXp(totalXp: number) {
+  let remaining = Math.max(0, totalXp);
+  for (const { from, to, xpPer } of LEVEL_RANGES) {
+    const rangeTotal = (to - from) * xpPer;
+    if (remaining < rangeTotal) {
+      const earned = Math.floor(remaining / xpPer);
+      return { level: from + earned, xpIntoLevel: remaining - earned * xpPer, xpForNextLevel: xpPer };
+    }
+    remaining -= rangeTotal;
+  }
+  return { level: 100, xpIntoLevel: 0, xpForNextLevel: null };
+}
 import DailyBattleBanner from '../components/DailyBattleBanner';
 import DailyGameCard from '../components/DailyGameCard';
 import WeeklyChallengeCard from '../components/WeeklyChallengeCard';
@@ -25,6 +47,8 @@ export default function HomePage() {
   const user = useAuthStore(s => s.user);
   const myElo = user?.eloRating ?? 0;
   const myRegionName = user?.regionName ?? '내 동네';
+  const myXp = user?.xp ?? 0;
+  const { level: myLevel, xpIntoLevel, xpForNextLevel } = calcLevelFromXp(myXp);
 
   const [missions, setMissions] = useState<DailyMission[]>([]);
   const [claiming, setClaiming] = useState<string | null>(null);
@@ -81,6 +105,9 @@ export default function HomePage() {
             <span className="text-2xl">{tier.emoji}</span>
             <p className="text-sm font-bold">{tier.name}</p>
             <p className="text-xs opacity-60">ELO {myElo.toLocaleString()}</p>
+            <Link to="/profile" className="inline-block mt-1 bg-yellow-400/20 rounded-full px-2 py-0.5 text-[10px] font-bold text-yellow-200">
+              ⚡ Lv.{myLevel}
+            </Link>
           </div>
         </div>
         {nextTier && (
@@ -97,7 +124,23 @@ export default function HomePage() {
             </div>
           </div>
         )}
-        <div className="flex gap-2 mt-3">
+        {/* XP 레벨 진행 바 */}
+      <div className="mt-3">
+        <div className="flex justify-between text-xs opacity-60 mb-1">
+          <span>⚡ Lv.{myLevel} 경험치</span>
+          {xpForNextLevel != null
+            ? <span>{xpIntoLevel.toLocaleString()} / {xpForNextLevel.toLocaleString()} XP</span>
+            : <span className="text-yellow-300 font-bold">MAX</span>
+          }
+        </div>
+        <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-gradient-to-r from-yellow-400 to-amber-300 rounded-full transition-all"
+            style={{ width: xpForNextLevel ? `${Math.max(3, (xpIntoLevel / xpForNextLevel) * 100)}%` : '100%' }}
+          />
+        </div>
+      </div>
+      <div className="flex gap-2 mt-3">
           <span className="bg-white/20 rounded-full px-3 py-1 text-xs">▲ 12 이번 주</span>
           <span className="bg-white/20 rounded-full px-3 py-1 text-xs">🔥 5연승</span>
         </div>

@@ -12,19 +12,27 @@ export interface PassTierReward {
   label: string;
 }
 
+/**
+ * 시즌 패스 10티어 — XP 기준 균등 분배
+ * 목표: 일 ≈ 300 시즌 XP 기준 약 25일 플레이로 Tier 10 달성
+ * (게임 20판×10 + 미션×50 + 출석×30 ≈ 300 XP/일)
+ */
 export const SEASON_PASS_TIERS: Array<{
   tier: number;
   requiredXp: number;
   free: PassTierReward;
   gold: PassTierReward;
 }> = [
-  { tier: 1, requiredXp: 100,  free: { coins: 200,  label: '🪙 코인 200'           }, gold: { coins: 500,  gems: 10,  label: '🪙 500 + 💎 10'         } },
-  { tier: 2, requiredXp: 300,  free: { gems: 20,    label: '💎 보석 20'            }, gold: { gems: 80,              label: '💎 보석 80'             } },
-  { tier: 3, requiredXp: 600,  free: { coins: 500,  label: '🪙 코인 500'           }, gold: { gems: 50,  coins: 1000, label: '🪙 1000 + 💎 50'        } },
-  { tier: 4, requiredXp: 1000, free: { coins: 1000, label: '🪙 코인 1000'          }, gold: { gems: 100,             label: '💎 보석 100'            } },
-  { tier: 5, requiredXp: 1500, free: { gems: 50,    label: '💎 보석 50'            }, gold: { gems: 100, assetKey: 'title_season_hero',   label: '💎 100 + 시즌 영웅 칭호' } },
-  { tier: 6, requiredXp: 2000, free: { coins: 2000, label: '🪙 코인 2000'          }, gold: { gems: 150, assetKey: 'hat_season_crown',    label: '💎 150 + 시즌 왕관'     } },
-  { tier: 7, requiredXp: 3000, free: { assetKey: 'title_season_veteran', label: '🏅 시즌 베테랑 칭호' }, gold: { gems: 200, assetKey: 'effect_season_aura', label: '💎 200 + 시즌 오라'     } },
+  { tier: 1,  requiredXp: 200,  free: { coins: 200,  label: '🪙 코인 200'              }, gold: { coins: 500,  gems: 10,  label: '🪙 500 + 💎 10'             } },
+  { tier: 2,  requiredXp: 500,  free: { gems: 20,    label: '💎 보석 20'               }, gold: { gems: 80,              label: '💎 보석 80'                  } },
+  { tier: 3,  requiredXp: 900,  free: { coins: 500,  label: '🪙 코인 500'              }, gold: { gems: 50,  coins: 1000, label: '🪙 1000 + 💎 50'             } },
+  { tier: 4,  requiredXp: 1400, free: { coins: 1000, label: '🪙 코인 1000'             }, gold: { gems: 100,             label: '💎 보석 100'                 } },
+  { tier: 5,  requiredXp: 2000, free: { gems: 50,    label: '💎 보석 50'               }, gold: { gems: 100, assetKey: 'title_season_hero',    label: '💎 100 + 시즌 영웅 칭호'  } },
+  { tier: 6,  requiredXp: 2700, free: { coins: 2000, label: '🪙 코인 2000'             }, gold: { gems: 150, assetKey: 'hat_season_crown',     label: '💎 150 + 시즌 왕관'       } },
+  { tier: 7,  requiredXp: 3500, free: { coins: 1500, label: '🪙 코인 1500'             }, gold: { gems: 80,  assetKey: 'effect_sparkle',       label: '💎 80 + 반짝 이펙트'       } },
+  { tier: 8,  requiredXp: 4500, free: { gems: 80,    label: '💎 보석 80'               }, gold: { gems: 150, assetKey: 'hat_season_hero',      label: '💎 150 + 시즌 영웅 왕관'  } },
+  { tier: 9,  requiredXp: 5800, free: { coins: 3000, label: '🪙 코인 3000'             }, gold: { gems: 200, assetKey: 'effect_season_flame',  label: '💎 200 + 시즌 불꽃 이펙트' } },
+  { tier: 10, requiredXp: 7500, free: { assetKey: 'title_season_veteran', label: '🏅 시즌 베테랑 칭호' }, gold: { gems: 300, assetKey: 'effect_season_aura', label: '💎 300 + 시즌 오라 이펙트'  } },
 ];
 
 /** XP 소스별 지급량 */
@@ -32,7 +40,6 @@ export const XP_GRANTS = {
   gameComplete: 10,
   missionComplete: 50,
   weeklyMissionComplete: 100,
-  pvpWin: 20,
   dailyCheckIn: 30,
 };
 

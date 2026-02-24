@@ -457,6 +457,17 @@ function ResultView({ config, score, gameType, gameMode, scoreTimeline, challeng
         </div>
       )}
 
+      {/* 레벨업 배너 */}
+      {result?.leveledUp && (
+        <div className="bg-yellow-400/20 border border-yellow-400/50 rounded-2xl px-5 py-3 mb-4 text-center w-full max-w-xs animate-pulse">
+          <p className="text-yellow-300 text-base font-black">⚡ LEVEL UP!</p>
+          <p className="text-yellow-100/80 text-sm font-bold mt-0.5">Lv.{result.newLevel} 달성!</p>
+          {result.newLevel && [10, 25, 50, 75, 100].includes(result.newLevel) && (
+            <p className="text-yellow-200/60 text-xs mt-1">🎁 마일스톤 보상 지급!</p>
+          )}
+        </div>
+      )}
+
       {/* 미션 완료 배너 */}
       {completedMissions.length > 0 && (
         <div className="bg-green-500/20 border border-green-500/40 rounded-2xl px-5 py-2.5 mb-4 text-center w-full max-w-xs">

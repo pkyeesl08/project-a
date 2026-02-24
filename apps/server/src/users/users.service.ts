@@ -4,6 +4,67 @@ import { Repository } from 'typeorm';
 import { UserEntity } from './user.entity';
 import { GameResultEntity } from '../games/game-result.entity';
 
+/**
+ * 단계별 레벨 구간 정의
+ * [maxLevel, xpPerLevel] — 해당 레벨 범위에서 레벨업 1회당 필요 XP
+ * Lv 1~10:   100 XP / 레벨
+ * Lv 10~30:  300 XP / 레벨
+ * Lv 30~50:  600 XP / 레벨
+ * Lv 50~70: 1200 XP / 레벨
+ * Lv 70~90: 2000 XP / 레벨
+ * Lv 90~100:5000 XP / 레벨
+ * 누적 Lv100: ≈132,900 XP (일 760 XP 기준 약 175일)
+ */
+const LEVEL_RANGES: Array<{ from: number; to: number; xpPer: number }> = [
+  { from: 1,  to: 10,  xpPer: 100  },
+  { from: 10, to: 30,  xpPer: 300  },
+  { from: 30, to: 50,  xpPer: 600  },
+  { from: 50, to: 70,  xpPer: 1200 },
+  { from: 70, to: 90,  xpPer: 2000 },
+  { from: 90, to: 100, xpPer: 5000 },
+];
+
+/** XP → 레벨 + 구간 내 진행도 계산 */
+export function calcLevelFromXp(totalXp: number): {
+  level: number;
+  xpIntoLevel: number;
+  xpForNextLevel: number | null;
+} {
+  if (totalXp < 0) return { level: 1, xpIntoLevel: 0, xpForNextLevel: 100 };
+  let remaining = totalXp;
+  for (const { from, to, xpPer } of LEVEL_RANGES) {
+    const levelsInRange = to - from;
+    const totalForRange = levelsInRange * xpPer;
+    if (remaining < totalForRange) {
+      const levelsEarned = Math.floor(remaining / xpPer);
+      return {
+        level: from + levelsEarned,
+        xpIntoLevel: remaining - levelsEarned * xpPer,
+        xpForNextLevel: xpPer,
+      };
+    }
+    remaining -= totalForRange;
+  }
+  return { level: 100, xpIntoLevel: 0, xpForNextLevel: null };
+}
+
+/** 레벨 마일스톤 보상 — 해당 레벨 달성 시 1회 지급 */
+export const LEVEL_MILESTONE_REWARDS: Record<number, { coins?: number; gems?: number; titleKey?: string }> = {
+  5:   { coins: 500 },
+  10:  { coins: 1000, gems: 30 },
+  15:  { coins: 500 },
+  20:  { coins: 1000, gems: 30 },
+  25:  { coins: 500, gems: 20 },
+  30:  { coins: 1000, gems: 30 },
+  40:  { coins: 1500, gems: 50 },
+  50:  { coins: 2000, gems: 80,  titleKey: 'title_half_gamer' },
+  60:  { coins: 1500, gems: 50 },
+  70:  { coins: 2000, gems: 80 },
+  80:  { coins: 2000, gems: 100 },
+  90:  { coins: 3000, gems: 150 },
+  100: { coins: 5000, gems: 200, titleKey: 'title_legend_gamer' },
+};
+
 @Injectable()
 export class UsersService {
   constructor(
@@ -111,18 +172,31 @@ export class UsersService {
 
   /**
    * XP 부여 & 레벨 자동 갱신
-   * 레벨 공식: level = floor(sqrt(xp / 50)) + 1 (최대 100)
+   * 레벨 공식: 구간별 단계적 XP 필요량 (calcLevelFromXp)
+   * 레벨 100 달성 누적 XP ≈ 132,900
    */
   async addXp(userId: string, amount: number): Promise<{ newXp: number; newLevel: number; leveledUp: boolean }> {
     const user = await this.usersRepo.findOne({ where: { id: userId } });
     if (!user) return { newXp: 0, newLevel: 1, leveledUp: false };
 
     const prevLevel = user.level;
-    // XP 상한 적용 (100,000,000)
     const newXp = Math.min(100_000_000, (user.xp ?? 0) + Math.abs(amount));
-    const newLevel = Math.min(100, Math.floor(Math.sqrt(newXp / 50)) + 1);
+    const { level: newLevel } = calcLevelFromXp(newXp);
 
     await this.usersRepo.update(userId, { xp: newXp, level: newLevel });
+
+    // 레벨 마일스톤 보상 — 이전 레벨 초과한 모든 마일스톤 지급
+    if (newLevel > prevLevel) {
+      for (let lv = prevLevel + 1; lv <= newLevel; lv++) {
+        const reward = LEVEL_MILESTONE_REWARDS[lv];
+        if (!reward) continue;
+        await Promise.allSettled([
+          reward.coins ? this.usersRepo.increment({ id: userId }, 'coins', reward.coins) : Promise.resolve(),
+          reward.gems  ? this.usersRepo.increment({ id: userId }, 'gems',  reward.gems)  : Promise.resolve(),
+        ]);
+      }
+    }
+
     return { newXp, newLevel, leveledUp: newLevel > prevLevel };
   }
 

@@ -3,6 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AttendanceEntity, ATTENDANCE_REWARDS } from './attendance.entity';
 import { AvatarService } from '../avatar/avatar.service';
+import { UsersService } from '../users/users.service';
+
+/** 출석 체크인 시 지급 계정 XP */
+const XP_PER_CHECKIN = 30;
 
 @Injectable()
 export class AttendanceService {
@@ -10,6 +14,7 @@ export class AttendanceService {
     @InjectRepository(AttendanceEntity)
     private attendanceRepo: Repository<AttendanceEntity>,
     private avatarService: AvatarService,
+    private usersService: UsersService,
   ) {}
 
   private today(): string {
@@ -56,6 +61,7 @@ export class AttendanceService {
     await Promise.allSettled([
       rewards.coins ? this.avatarService.addCoins(userId, rewards.coins) : Promise.resolve(),
       rewards.gems  ? this.avatarService.addGems(userId, rewards.gems)   : Promise.resolve(),
+      this.usersService.addXp(userId, XP_PER_CHECKIN),  // 계정 XP +30
     ]);
 
     const record = await this.attendanceRepo.findOne({ where: { userId, checkDate: today } });
