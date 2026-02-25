@@ -200,6 +200,19 @@ export class UsersService {
     return { newXp, newLevel, leveledUp: newLevel > prevLevel };
   }
 
+  /** 보석 차감 — 잔액 부족 시 BadRequestException */
+  async spendGems(userId: string, amount: number): Promise<void> {
+    const result = await this.usersRepo
+      .createQueryBuilder()
+      .update(UserEntity)
+      .set({ gems: () => `"gems" - ${Math.abs(amount)}` })
+      .where('id = :userId AND gems >= :amount', { userId, amount: Math.abs(amount) })
+      .execute();
+    if ((result.affected ?? 0) === 0) {
+      throw new BadRequestException(`보석이 부족합니다. ${Math.abs(amount)}💎 필요`);
+    }
+  }
+
   async getStats(userId: string, requestingUserId?: string) {
     const user = await this.findById(userId);
     if (!user) throw new NotFoundException('User not found');

@@ -512,6 +512,18 @@ function ResultView({ config, score, gameType, gameMode, scoreTimeline, challeng
             <p className="text-xs text-white/40">⚡ +{result.xpReward ?? 10} XP</p>
           </div>
         )}
+        {result?.activeBonuses?.length > 0 && (
+          <div className="mt-2 pt-2 border-t border-white/10">
+            <p className="text-[10px] text-white/30 text-center mb-1">🧬 DNA 보너스 적용</p>
+            <div className="flex flex-wrap gap-1 justify-center">
+              {result.activeBonuses.map((bonus: string, i: number) => (
+                <span key={i} className="text-[10px] bg-indigo-500/20 text-indigo-300 rounded-full px-2 py-0.5 font-bold">
+                  {bonus}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* daily 모드: 오늘의 순위 패널 */}

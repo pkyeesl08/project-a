@@ -50,6 +50,21 @@ type Phase = 'idle' | 'countdown' | 'playing' | 'transition' | 'gameover';
 export default function EndlessModePage() {
   const navigate = useNavigate();
 
+  // DNA 액션 하트 +1 여부
+  const [dnaExtraHeart, setDnaExtraHeart] = useState(false);
+  const livesMaxRef = useRef(LIVES_MAX);
+
+  useEffect(() => {
+    api.getDnaEnhancements('action').then(e => {
+      if (e.endlessExtraHeart) {
+        setDnaExtraHeart(true);
+        livesMaxRef.current = LIVES_MAX + 1;
+      }
+    }).catch(() => {});
+  }, []);
+
+  const livesMax = dnaExtraHeart ? LIVES_MAX + 1 : LIVES_MAX;
+
   // UI 상태
   const [phase, setPhase] = useState<Phase>('idle');
   const [round, setRound] = useState(0);
@@ -89,11 +104,12 @@ export default function EndlessModePage() {
   // ── handleStart ──────────────────────────────────
 
   const handleStart = useCallback(() => {
+    const max = livesMaxRef.current;
     roundRef.current = 0;
-    livesRef.current = LIVES_MAX;
+    livesRef.current = max;
     scoreRef.current = 0;
     setRound(0);
-    setLives(LIVES_MAX);
+    setLives(max);
     setDisplayScore(0);
     setRoundPassed(null);
     startRound(0);
@@ -192,7 +208,7 @@ export default function EndlessModePage() {
           <div className="bg-white/10 rounded-2xl p-5 w-full max-w-xs text-sm space-y-2 text-white/80">
             <p>🎮 라운드마다 <strong className="text-white">랜덤 미니게임</strong> 등장</p>
             <p>⚡ 매 라운드 <strong className="text-white">200ms씩 빨라짐</strong></p>
-            <p>❤️ 목숨 {LIVES_MAX}개 — 0점이면 목숨 1개 소모</p>
+            <p>❤️ 목숨 {livesMax}개 — 0점이면 목숨 1개 소모{dnaExtraHeart ? ' 🎮 DNA +1' : ''}</p>
             <p>🏆 목숨이 다하면 종료 · 클리어 라운드로 순위 결정</p>
           </div>
           <button
@@ -217,7 +233,7 @@ export default function EndlessModePage() {
             </span>
           </div>
           <div className="flex gap-1.5 mt-2">
-            {Array.from({ length: LIVES_MAX }).map((_, i) => (
+            {Array.from({ length: livesMax }).map((_, i) => (
               <span key={i} className={`text-2xl transition-opacity ${i < lives ? 'opacity-100' : 'opacity-20'}`}>
                 ❤️
               </span>
@@ -242,7 +258,7 @@ export default function EndlessModePage() {
           {/* HUD */}
           <div className="flex items-center justify-between px-5 py-2">
             <div className="flex gap-1">
-              {Array.from({ length: LIVES_MAX }).map((_, i) => (
+              {Array.from({ length: livesMax }).map((_, i) => (
                 <span key={i} className={`text-base transition-opacity ${i < lives ? 'opacity-100' : 'opacity-20'}`}>
                   ❤️
                 </span>
@@ -273,7 +289,7 @@ export default function EndlessModePage() {
             {roundPassed ? `라운드 ${round} 클리어!` : '목숨 -1'}
           </p>
           <div className="flex gap-1.5">
-            {Array.from({ length: LIVES_MAX }).map((_, i) => (
+            {Array.from({ length: livesMax }).map((_, i) => (
               <span key={i} className={`text-2xl transition-opacity ${i < lives ? 'opacity-100' : 'opacity-20'}`}>
                 ❤️
               </span>

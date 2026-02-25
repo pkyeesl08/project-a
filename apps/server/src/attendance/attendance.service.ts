@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { AttendanceEntity, ATTENDANCE_REWARDS } from './attendance.entity';
 import { AvatarService } from '../avatar/avatar.service';
 import { UsersService } from '../users/users.service';
+import { DnaService } from '../dna/dna.service';
 
 /** 출석 체크인 시 지급 계정 XP */
 const XP_PER_CHECKIN = 30;
@@ -15,6 +16,7 @@ export class AttendanceService {
     private attendanceRepo: Repository<AttendanceEntity>,
     private avatarService: AvatarService,
     private usersService: UsersService,
+    private dnaService: DnaService,
   ) {}
 
   private today(): string {
@@ -58,10 +60,14 @@ export class AttendanceService {
     }
 
     // 삽입 성공 → 보상 지급 (한 번만 실행됨)
+    // 🌟 파티 DNA 5pt 이상 → 코인/XP 1.5배 보너스
+    const dnaBonus = await this.dnaService.getAttendanceBonus(userId);
+    const bonusCoins = rewards.coins ? Math.round(rewards.coins * dnaBonus) : 0;
+    const bonusXp   = Math.round(XP_PER_CHECKIN * dnaBonus);
     await Promise.allSettled([
-      rewards.coins ? this.avatarService.addCoins(userId, rewards.coins) : Promise.resolve(),
+      bonusCoins ? this.avatarService.addCoins(userId, bonusCoins) : Promise.resolve(),
       rewards.gems  ? this.avatarService.addGems(userId, rewards.gems)   : Promise.resolve(),
-      this.usersService.addXp(userId, XP_PER_CHECKIN),  // 계정 XP +30
+      this.usersService.addXp(userId, bonusXp),  // 계정 XP (+30 기본, DNA 보너스 적용)
     ]);
 
     const record = await this.attendanceRepo.findOne({ where: { userId, checkDate: today } });

@@ -24,6 +24,7 @@ import { AttendanceModule } from './attendance/attendance.module';
 import { SeasonPassModule } from './season-pass/season-pass.module';
 import { GachaModule } from './gacha/gacha.module';
 import { BoardsModule } from './boards/boards.module';
+import { DnaModule } from './dna/dna.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { BoardsModule } from './boards/boards.module';
     SeasonPassModule,
     GachaModule,
     BoardsModule,
+    DnaModule,
   ],
 })
 export class AppModule implements NestModule {

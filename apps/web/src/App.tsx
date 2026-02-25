@@ -22,6 +22,7 @@ import BoardPage from './pages/BoardPage';
 import BoardPostPage from './pages/BoardPostPage';
 import BoardWritePage from './pages/BoardWritePage';
 import BoardEditPage from './pages/BoardEditPage';
+import DnaPage from './pages/DnaPage';
 import NotificationBanner from './components/NotificationBanner';
 
 /** 로그인이 필요한 라우트 — 미로그인 시 /register로 리다이렉트 */
@@ -71,6 +72,9 @@ export default function App() {
       {/* 풀스크린 (탭바 없음) */}
       <Route path="/avatar" element={
         <PrivateRoute><AvatarPage /></PrivateRoute>
+      } />
+      <Route path="/dna" element={
+        <PrivateRoute><DnaPage /></PrivateRoute>
       } />
       <Route path="/season-pass" element={
         <PrivateRoute><SeasonPassPage /></PrivateRoute>

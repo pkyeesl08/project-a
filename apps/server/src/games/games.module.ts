@@ -14,6 +14,7 @@ import { WeeklyChallengeModule } from '../weekly-challenge/weekly-challenge.modu
 import { RedisModule } from '../redis/redis.module';
 import { NotificationsModule } from '../notifications/notification.module';
 import { SeasonPassModule } from '../season-pass/season-pass.module';
+import { DnaModule } from '../dna/dna.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { SeasonPassModule } from '../season-pass/season-pass.module';
     RedisModule,
     NotificationsModule,
     SeasonPassModule,
+    DnaModule,
   ],
   controllers: [GamesController],
   providers: [GamesService, DailyGameService],

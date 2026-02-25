@@ -711,6 +711,63 @@ class ApiClient {
   updateBoardComment(commentId: string, content: string) {
     return this.request<BoardComment>(`/boards/comments/${commentId}`, { method: 'PATCH', body: JSON.stringify({ content }) });
   }
+
+  // ───── 게이머 DNA ─────
+
+  getDnaStatus() {
+    return this.request<{
+      pts: { reaction: number; puzzle: number; action: number; precision: number; party: number };
+      totalUsed: number;
+      totalAvailable: number;
+      remaining: number;
+      level: number;
+      canFreeReset: boolean;
+      gemResetCost: number;
+      tokens: {
+        eloShield: { unlocked: boolean; weeklyLimit: number; used: number; remaining: number; pendingActive: boolean };
+        doubleUp: { unlocked: boolean; weeklyLimit: number; used: number; remaining: number; pendingActive: boolean };
+        bestPick: { unlocked: boolean; weeklyLimit: number; used: number; remaining: number; activeSession: any };
+      };
+    }>('/dna');
+  }
+
+  allocateDna(pts: { reaction: number; puzzle: number; action: number; precision: number; party: number }) {
+    return this.request<{ allocated: boolean; pts: typeof pts }>('/dna', {
+      method: 'PATCH',
+      body: JSON.stringify(pts),
+    });
+  }
+
+  resetDnaFree() {
+    return this.request<{ reset: boolean; type: string }>('/dna/reset/free', { method: 'POST' });
+  }
+
+  resetDnaGems() {
+    return this.request<{ reset: boolean; type: string; gemsSpent: number }>('/dna/reset/gems', { method: 'POST' });
+  }
+
+  activateEloShield() {
+    return this.request<{ activated: boolean; token: string }>('/dna/tokens/elo-shield', { method: 'POST' });
+  }
+
+  activateDoubleUp() {
+    return this.request<{ activated: boolean; token: string }>('/dna/tokens/double-up', { method: 'POST' });
+  }
+
+  activateBestPick() {
+    return this.request<{ started: boolean }>('/dna/tokens/best-pick', { method: 'POST' });
+  }
+
+  getDnaEnhancements(gameCategory?: string) {
+    const q = gameCategory ? `?gameCategory=${encodeURIComponent(gameCategory)}` : '';
+    return this.request<{
+      xpBonus: boolean; coinBonus: boolean;
+      hasSlowToken: boolean; hasPatternExtender: boolean; hasAimAssist: boolean;
+      hasSecondChance: boolean; endlessExtraHeart: boolean; hasBestPickActive: boolean;
+      eloShieldPending: boolean; doubleUpPending: boolean;
+      eloShieldRemaining: number; doubleUpRemaining: number; bestPickRemaining: number;
+    }>(`/dna/enhancements${q}`);
+  }
 }
 
 export interface BoardPost {

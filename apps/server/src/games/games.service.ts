@@ -14,6 +14,7 @@ import { WeeklyChallengeService } from '../weekly-challenge/weekly-challenge.ser
 import { NotificationService } from '../notifications/notification.service';
 import { SeasonPassService } from '../season-pass/season-pass.service';
 import { REDIS_CLIENT } from '../redis/redis.module';
+import { DnaService } from '../dna/dna.service';
 import { normalizeScore, calculateElo, calculateSoloEloAdjustment, GameType, GAME_CONFIGS } from '@donggamerank/shared';
 
 /** 게임별 클라이언트 제출 가능한 최대 raw 점수 — 조작 차단용 */
@@ -80,6 +81,7 @@ export class GamesService {
     private weeklyChallengeService: WeeklyChallengeService,
     private notificationService: NotificationService,
     private seasonPassService: SeasonPassService,
+    private dnaService: DnaService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
 
@@ -186,7 +188,21 @@ export class GamesService {
       eloChange = soloResult.change;
     }
 
-    await this.usersService.updateElo(userId, newElo);
+    // DNA 효과 적용 (ELO, XP, 코인 조정)
+    const gameConfig = GAME_CONFIGS[data.gameType as GameType];
+    const gameCategory = gameConfig?.category ?? '';
+    const rawXpReward = XP_PER_GAME + (isNewHighScore ? XP_BONUS_HIGHSCORE : 0);
+    const dnaResult = await this.dnaService.applyDnaEffects(userId, {
+      gameCategory,
+      isNewHighScore,
+      rawEloChange: eloChange,
+      coinReward: COIN_REWARD_SOLO,
+      xpReward: rawXpReward,
+    });
+    // DNA 보정된 최종 ELO 적용
+    const adjustedNewElo = newElo + (dnaResult.finalEloChange - eloChange);
+    eloChange = dnaResult.finalEloChange;
+    await this.usersService.updateElo(userId, adjustedNewElo);
 
     // 랭킹 업데이트 (Redis Sorted Set)
     await Promise.allSettled([
@@ -226,9 +242,6 @@ export class GamesService {
       else break;
     }
 
-    // 코인 지급 (게임 완료 기본 보상)
-    const coinReward = COIN_REWARD_SOLO;
-
     // 챌린지 링크를 통해 도전하여 이긴 경우 → 원본 챌린저에게 알림
     const challengeToken = data.metadata?.challengeToken as string | undefined;
     if (challengeToken) {
@@ -251,13 +264,14 @@ export class GamesService {
       }).catch(() => {});
     }
 
-    const xpReward = XP_PER_GAME + (isNewHighScore ? XP_BONUS_HIGHSCORE : 0);
+    const xpReward = dnaResult.finalXpReward;
+    const finalCoinReward = dnaResult.finalCoinReward;
 
     // XP 지급 결과 수집 (레벨업 여부 확인)
     const xpResult = await this.usersService.addXp(userId, xpReward);
 
     Promise.allSettled([
-      this.avatarService.addCoins(userId, coinReward),
+      this.avatarService.addCoins(userId, finalCoinReward),
       this.seasonPassService.addSeasonXp(userId, 'gameComplete'),
       this.missionsService.handleGameResult(userId, {
         gameType: data.gameType,
@@ -283,12 +297,13 @@ export class GamesService {
     return {
       resultId: saved.id,
       rankChange: eloChange,
-      newElo,
+      newElo: adjustedNewElo,
       regionRank,
       isNewHighScore,
       seasonId,
-      coinReward,
+      coinReward: finalCoinReward,
       xpReward,
+      activeBonuses: dnaResult.activeBonuses,
       leveledUp: xpResult.leveledUp,
       newLevel: xpResult.newLevel,
       newXp: xpResult.newXp,
