@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────
+  db:
+    image: postgres:14-alpine
+    restart: always
+    environment:
+      POSTGRES_DB:       donggamerank
+      POSTGRES_USER:     postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:     ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+
+  # ── Redis ───────────────────────────────────
+  redis:
+    image: redis:6-alpine
+    restart: always
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test:     ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+
+  # ── NestJS 백엔드 ────────────────────────────
+  server:
+    build:
+      context:    .
+      dockerfile: Dockerfile.server
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DB_HOST:      db
+      DB_PORT:      5432
+      DB_USERNAME:  postgres
+      DB_PASSWORD:  ${DB_PASSWORD}
+      DB_NAME:      donggamerank
+      JWT_SECRET:   ${JWT_SECRET}
+      REDIS_HOST:   redis
+      REDIS_PORT:   6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      PORT:         3000
+      NODE_ENV:     production
+      CORS_ORIGIN:  http://${SERVER_IP}
+
+  # ── React 프론트엔드 (Nginx) ─────────────────
+  web:
+    build:
+      context:    .
+      dockerfile: Dockerfile.web
+    restart: always
+    depends_on:
+      - server
+    ports:
+      - "80:80"
+
+volumes:
+  postgres_data:
+  redis_data:
