@@ -24,7 +24,7 @@ class SocketService {
   connect(token?: string) {
     if (this.socket?.connected) return;
 
-    this.socket = io(window.location.origin, {
+    this.socket = io(import.meta.env.VITE_SOCKET_URL || window.location.origin, {
       auth: token ? { token } : undefined,
       transports: ['websocket', 'polling'],
     });
