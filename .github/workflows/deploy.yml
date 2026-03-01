@@ -1,0 +1,76 @@
+# GitHub Actions: 자동 배포 파이프라인
+# main 브랜치에 push하면 자동으로 배포됩니다.
+#
+# 필요한 GitHub Secrets 설정:
+#   EC2_HOST          - EC2 탄력적 IP 주소
+#   EC2_SSH_KEY       - EC2 .pem 키 파일 내용 전체
+#   AWS_ACCESS_KEY_ID - AWS IAM 액세스 키
+#   AWS_SECRET_ACCESS_KEY - AWS IAM 시크릿 키
+#   S3_BUCKET         - S3 버킷 이름 (예: donggamerank-web)
+#   CLOUDFRONT_DISTRIBUTION_ID - CloudFront 배포 ID
+
+name: Deploy to AWS
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  # 백엔드 배포: EC2에 SSH로 접속하여 Docker로 배포
+  deploy-server:
+    name: Deploy Server to EC2
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /home/ec2-user/donggamerank
+            git pull origin main
+            docker-compose -f docker-compose.prod.yml down
+            docker-compose -f docker-compose.prod.yml up -d --build
+            docker image prune -f
+            echo "Server deployment complete!"
+
+  # 프론트엔드 배포: 빌드 후 S3에 업로드
+  deploy-web:
+    name: Deploy Web to S3
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web app
+        run: |
+          cd apps/web
+          npx vite build
+        env:
+          NODE_ENV: production
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-northeast-2
+
+      - name: Deploy to S3
+        run: aws s3 sync apps/web/dist/ s3://${{ secrets.S3_BUCKET }} --delete
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/*"
