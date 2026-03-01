@@ -97,7 +97,7 @@ export default function RegisterPage() {
         },
         result.accessToken,
       );
-      navigate('/', { replace: true });
+      navigate('/onboarding', { replace: true });
     } catch (err: any) {
       setStatus('taken');
       setMessage(err.message || '가입에 실패했습니다.');

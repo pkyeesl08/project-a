@@ -19,11 +19,13 @@ export function normalizeScore(gameType: GameType, rawScore: number): number {
     [GameType.SAME_PICTURE]: (ms) => Math.max(0, 10000 - ms * 5),
     [GameType.ODD_EVEN]: (rate) => Math.min(10000, rate * 100),
     // 🎮 액션/모션
-    [GameType.SHAKE_IT]: (intensity) => Math.min(10000, intensity * 10),
     [GameType.DIRECTION_SWIPE]: (correct) => Math.min(10000, correct * 1000),
-    [GameType.TILT_BALANCE]: (ms) => Math.max(0, 10000 - ms * 2),
     [GameType.STOP_THE_BAR]: (px) => Math.max(0, 10000 - px * 100),
     [GameType.RPS_SPEED]: (wins) => Math.min(10000, wins * 1500),
+    // score = max(0, 7000 - elapsed_ms) → 정규화
+    [GameType.SEQUENCE_TAP]: (score) => Math.min(10000, Math.round(score / 7000 * 10000)),
+    // score = 누적 속도 점수(0~15) → 정규화
+    [GameType.REVERSE_REACTION]: (pts) => Math.min(10000, Math.round(pts / 15 * 10000)),
     // 🎯 정밀/집중
     [GameType.LINE_TRACE]: (acc) => Math.min(10000, acc * 100),
     [GameType.TARGET_SNIPER]: (hits) => Math.min(10000, hits * 1000),
@@ -32,10 +34,15 @@ export function normalizeScore(gameType: GameType, rawScore: number): number {
     [GameType.LINE_GROW]: (length) => Math.min(10000, length * 20),
     // 🌟 특수/파티
     [GameType.MATH_SPEED]: (correct) => Math.min(10000, correct * 1000),
-    [GameType.MIC_SHOUT]: (db) => Math.min(10000, db * 80),
     [GameType.SHELL_GAME]: (correct) => Math.min(10000, correct * 2000),
     [GameType.EMOJI_SORT]: (correct) => Math.min(10000, correct * 700),
     [GameType.COUNT_MORE]: (rate) => Math.min(10000, rate * 100),
+    // score = 누적 정밀도(0~600) → 정규화
+    [GameType.DUAL_PRECISION]: (pts) => Math.min(10000, Math.round(pts / 600 * 10000)),
+    // score = 정답 개수(0~5) × 2000
+    [GameType.REVERSE_MEMORY]: (correct) => Math.min(10000, correct * 2000),
+    // score = 누적 조준 점수(0~800) → 정규화
+    [GameType.RAPID_AIM]: (pts) => Math.min(10000, Math.round(pts / 800 * 10000)),
   };
 
   return Math.round(normalizers[gameType](rawScore));

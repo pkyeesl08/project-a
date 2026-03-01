@@ -35,7 +35,12 @@ export function calculateElo(
 
 /**
  * 솔로 모드 ELO 보정 (자기 자신과의 경쟁)
- * 최고 기록 갱신 시 소폭 상승, 평균 이하 시 소폭 하락
+ * - 첫 게임(best=0, avg=0): 점수가 있으면 +5
+ * - 최고 기록 갱신: +5 ~ +15
+ * - 평균 이상: +1 ~ +3
+ * - 평균 이하: -1 ~ -3
+ *
+ * 수정: personalBest/personalAverage가 0일 때 0 나누기 방지
  */
 export function calculateSoloEloAdjustment(
   currentRating: number,
@@ -45,16 +50,25 @@ export function calculateSoloEloAdjustment(
 ): { newRating: number; change: number } {
   let change = 0;
 
-  if (score > personalBest) {
+  if (personalBest === 0 && personalAverage === 0) {
+    // 첫 게임: 점수가 있으면 소폭 상승
+    change = score > 0 ? 5 : 0;
+  } else if (score > personalBest) {
     // 최고 기록 갱신: +5 ~ +15
-    const improvement = (score - personalBest) / personalBest;
+    const improvement = personalBest > 0
+      ? (score - personalBest) / personalBest
+      : 0.5;
     change = Math.min(15, Math.max(5, Math.round(improvement * 50)));
-  } else if (score >= personalAverage) {
+  } else if (personalAverage > 0 && score >= personalAverage) {
     // 평균 이상: +1 ~ +3
-    change = Math.min(3, Math.max(1, Math.round((score - personalAverage) / personalAverage * 10)));
-  } else {
+    change = Math.min(3, Math.max(1,
+      Math.round((score - personalAverage) / personalAverage * 10),
+    ));
+  } else if (personalAverage > 0) {
     // 평균 이하: -1 ~ -3
-    change = Math.max(-3, Math.round((score - personalAverage) / personalAverage * 5));
+    change = Math.max(-3,
+      Math.round((score - personalAverage) / personalAverage * 5),
+    );
   }
 
   const newRating = Math.max(0, currentRating + change);

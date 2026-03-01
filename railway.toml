@@ -1,0 +1,10 @@
+[build]
+builder = "nixpacks"
+buildCommand = "npm install && npm run build --filter=@donggamerank/shared && npm run build --filter=server"
+
+[deploy]
+startCommand = "node apps/server/dist/main.js"
+restartPolicyType = "on-failure"
+restartPolicyMaxRetries = 3
+healthcheckPath = "/api"
+healthcheckTimeout = 30

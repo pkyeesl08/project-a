@@ -1,4 +1,5 @@
-import { Controller, Post, Delete, Body, UseGuards } from '@nestjs/common';
+import { Controller, Post, Delete, Body, UseGuards, Req } from '@nestjs/common';
+import { Request } from 'express';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { LoginDto, RefreshDto, RegisterDto } from '../common/dto';
@@ -24,9 +25,12 @@ export class AuthController {
     return ok(await this.authService.refresh(dto.refreshToken));
   }
 
+  /** 로그아웃 — 토큰을 블랙리스트에 등록하여 즉시 무효화 */
   @Delete('logout')
   @UseGuards(JwtAuthGuard)
-  async logout() {
+  async logout(@Req() req: Request) {
+    const token = req.headers['authorization']?.replace('Bearer ', '') ?? '';
+    await this.authService.logout(token);
     return ok(null);
   }
 }

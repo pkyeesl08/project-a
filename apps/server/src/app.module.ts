@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, MiddlewareConsumer, NestModule, RequestMethod } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -9,9 +9,26 @@ import { SchoolsModule } from './schools/schools.module';
 import { ExternalModule } from './external/external.module';
 import { MapModule } from './map/map.module';
 import { MatchModule } from './match/match.module';
+import { RedisModule } from './redis/redis.module';
+import { RateLimitMiddleware } from './common/rate-limit.middleware';
+import { SeasonsModule } from './seasons/seasons.module';
+import { MissionsModule } from './missions/missions.module';
+import { AchievementsModule } from './achievements/achievements.module';
+import { FriendsModule } from './friends/friends.module';
+import { EventsModule } from './events/events.module';
+import { AvatarModule } from './avatar/avatar.module';
+import { NeighborhoodBattleModule } from './neighborhood-battle/neighborhood-battle.module';
+import { WeeklyChallengeModule } from './weekly-challenge/weekly-challenge.module';
+import { NotificationsModule } from './notifications/notification.module';
+import { AttendanceModule } from './attendance/attendance.module';
+import { SeasonPassModule } from './season-pass/season-pass.module';
+import { GachaModule } from './gacha/gacha.module';
+import { BoardsModule } from './boards/boards.module';
+import { DnaModule } from './dna/dna.module';
 
 @Module({
   imports: [
+    RedisModule,
     TypeOrmModule.forRoot({
       type: 'postgres',
       host: process.env.DB_HOST || 'localhost',
@@ -21,6 +38,7 @@ import { MatchModule } from './match/match.module';
       database: process.env.DB_NAME || 'donggamerank',
       autoLoadEntities: true,
       synchronize: process.env.NODE_ENV !== 'production',
+      extra: { max: 20 }, // 커넥션 풀 최대 20
     }),
     AuthModule,
     UsersModule,
@@ -31,6 +49,27 @@ import { MatchModule } from './match/match.module';
     ExternalModule,
     MapModule,
     MatchModule,
+    SeasonsModule,
+    MissionsModule,
+    AchievementsModule,
+    FriendsModule,
+    EventsModule,
+    AvatarModule,
+    NeighborhoodBattleModule,
+    WeeklyChallengeModule,
+    NotificationsModule,
+    AttendanceModule,
+    SeasonPassModule,
+    GachaModule,
+    BoardsModule,
+    DnaModule,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    // 전역 Rate Limiting — 모든 엔드포인트 (분당 60회, userId 또는 실제 IP 기반)
+    consumer
+      .apply(RateLimitMiddleware)
+      .forRoutes({ path: '*', method: RequestMethod.ALL });
+  }
+}

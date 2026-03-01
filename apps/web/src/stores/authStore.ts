@@ -9,6 +9,8 @@ interface User {
   regionName: string;
   schoolName: string | null;
   isPublic: boolean;
+  xp: number;
+  level: number;
 }
 
 interface AuthState {

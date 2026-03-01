@@ -3,6 +3,11 @@ import {
   OnGatewayConnection, OnGatewayDisconnect, ConnectedSocket, MessageBody,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import { JwtService } from '@nestjs/jwt';
+import { Inject, OnModuleDestroy } from '@nestjs/common';
+import Redis from 'ioredis';
+import { REDIS_CLIENT } from '../redis/redis.module';
+import { UsersService } from '../users/users.service';
 
 interface QueuedPlayer {
   socketId: string;
@@ -13,34 +18,131 @@ interface QueuedPlayer {
   joinedAt: number;
 }
 
-@WebSocketGateway({ cors: { origin: '*' } })
-export class MatchGateway implements OnGatewayConnection, OnGatewayDisconnect {
+/** 허용된 게임 액션 화이트리스트 */
+const VALID_GAME_ACTIONS = new Set(['tap', 'swipe', 'hold', 'release', 'score', 'result']);
+
+/** 매칭 대기 최대 시간 (30초) */
+const MATCH_QUEUE_TIMEOUT_MS = 30_000;
+
+/** Redis에 저장할 매칭 기록 TTL (1시간) */
+const MATCH_RECORD_TTL_SEC = 3600;
+
+const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173';
+
+@WebSocketGateway({ cors: { origin: CORS_ORIGIN, credentials: true } })
+export class MatchGateway implements OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy {
   @WebSocketServer()
   server: Server;
 
   private matchQueue: QueuedPlayer[] = [];
-  private activeMatches = new Map<string, { players: string[]; gameType: string }>();
+  private activeMatches = new Map<string, { players: string[]; gameType: string; readyCount: number }>();
+
+  /** 소켓ID → 인증된 userId + DB 기반 ELO 매핑 */
+  private socketUserMap = new Map<string, { userId: string; eloRating: number }>();
+
+  /** 큐 타임아웃 폴링 타이머 핸들 */
+  private pruneTimer: ReturnType<typeof setInterval>;
+
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly usersService: UsersService,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
+  ) {
+    // 5초마다 타임아웃된 큐 플레이어 제거
+    this.pruneTimer = setInterval(() => this.pruneTimedOutQueue(), 5000);
+  }
+
+  /** 모듈 종료 시 타이머 정리 */
+  onModuleDestroy() {
+    clearInterval(this.pruneTimer);
+  }
+
+  /** 30초 초과 대기자 큐에서 제거 후 클라이언트에 알림 */
+  private pruneTimedOutQueue() {
+    const now = Date.now();
+    const timedOut: QueuedPlayer[] = [];
+    this.matchQueue = this.matchQueue.filter(p => {
+      if (now - p.joinedAt > MATCH_QUEUE_TIMEOUT_MS) {
+        timedOut.push(p);
+        return false;
+      }
+      return true;
+    });
+    for (const p of timedOut) {
+      const socket = this.server?.sockets.sockets.get(p.socketId);
+      socket?.emit('match:timeout', { message: '매칭 대기 시간이 초과되었습니다. 다시 시도해주세요.' });
+    }
+  }
 
   handleConnection(client: Socket) {
-    console.log(`🔌 Client connected: ${client.id}`);
+    // JWT 토큰 검증 (handshake.auth.token 또는 Authorization 헤더)
+    const token =
+      (client.handshake.auth as Record<string, string>)?.token ??
+      client.handshake.headers.authorization?.replace('Bearer ', '');
+
+    if (!token) {
+      client.emit('auth:error', { message: '인증 토큰이 필요합니다.' });
+      client.disconnect();
+      return;
+    }
+
+    try {
+      const payload = this.jwtService.verify(token) as { sub: string };
+      // DB에서 실제 ELO를 로드하여 저장 (클라이언트 전달 값 불신)
+      const user = await this.usersService.findById(payload.sub);
+      if (!user) {
+        client.emit('auth:error', { message: '존재하지 않는 사용자입니다.' });
+        client.disconnect();
+        return;
+      }
+      this.socketUserMap.set(client.id, { userId: payload.sub, eloRating: user.eloRating });
+    } catch {
+      client.emit('auth:error', { message: '유효하지 않은 토큰입니다.' });
+      client.disconnect();
+    }
   }
 
   handleDisconnect(client: Socket) {
-    console.log(`❌ Client disconnected: ${client.id}`);
+    this.socketUserMap.delete(client.id);
+    // 큐에서 제거
     this.matchQueue = this.matchQueue.filter(p => p.socketId !== client.id);
+    // 진행 중인 매치에서 상대에게 알림
+    for (const [matchId, match] of this.activeMatches) {
+      if (match.players.includes(client.id)) {
+        client.to(matchId).emit('match:opponent_disconnected', { matchId });
+        this.activeMatches.delete(matchId);
+      }
+    }
   }
 
   @SubscribeMessage('match:request')
   handleMatchRequest(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { userId: string; gameType: string; mode: string; eloRating: number },
+    @MessageBody() data: { gameType: string; mode: string; eloRating: number },
   ) {
+    // 인증된 userId + DB ELO 사용 (클라이언트 전달 값 불신)
+    const userInfo = this.socketUserMap.get(client.id);
+    if (!userInfo) {
+      client.emit('match:error', { message: '인증이 필요합니다.' });
+      return;
+    }
+
+    if (!data?.gameType || !data?.mode) {
+      client.emit('match:error', { message: '잘못된 매칭 요청입니다.' });
+      return;
+    }
+
+    const { userId, eloRating } = userInfo;
+
+    // 중복 등록 방지: 같은 유저가 이미 큐에 있으면 교체
+    this.matchQueue = this.matchQueue.filter(p => p.userId !== userId);
+
     const player: QueuedPlayer = {
       socketId: client.id,
-      userId: data.userId,
+      userId,
       gameType: data.gameType,
       mode: data.mode,
-      eloRating: data.eloRating,
+      eloRating,  // DB에서 로드한 실제 ELO 사용
       joinedAt: Date.now(),
     };
 
@@ -51,6 +153,7 @@ export class MatchGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('match:cancel')
   handleMatchCancel(@ConnectedSocket() client: Socket) {
     this.matchQueue = this.matchQueue.filter(p => p.socketId !== client.id);
+    client.emit('match:cancelled');
   }
 
   @SubscribeMessage('game:ready')
@@ -58,9 +161,18 @@ export class MatchGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { matchId: string },
   ) {
+    if (!data?.matchId || typeof data.matchId !== 'string') return;
+
     const match = this.activeMatches.get(data.matchId);
-    if (match) {
-      // 양쪽 준비 완료 시 게임 시작
+    if (!match) return;
+
+    // 해당 매치의 참가자인지 검증
+    if (!match.players.includes(client.id)) return;
+
+    match.readyCount = (match.readyCount ?? 0) + 1;
+
+    // 양쪽 모두 준비됐을 때 게임 시작
+    if (match.readyCount >= 2) {
       this.server.to(data.matchId).emit('game:start', {
         matchId: data.matchId,
         gameType: match.gameType,
@@ -73,51 +185,79 @@ export class MatchGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('game:action')
   handleGameAction(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { matchId: string; action: string; value: number; timestamp: number },
+    @MessageBody() data: { matchId: string; action: string; value: number },
   ) {
-    // 상대에게 액션 전달
-    client.to(data.matchId).emit('game:opponent_action', data);
+    if (!data?.matchId || !data?.action) return;
+
+    // 액션 화이트리스트 검증
+    if (!VALID_GAME_ACTIONS.has(data.action)) return;
+
+    // 해당 매치의 참가자인지 검증
+    const match = this.activeMatches.get(data.matchId);
+    if (!match || !match.players.includes(client.id)) return;
+
+    // value 범위 검증 (0 ~ 999999)
+    const safeValue = Math.max(0, Math.min(999999, data.value ?? 0));
+    // timestamp는 클라이언트 값 신뢰 안 함 — 서버 시간 사용
+    client.to(data.matchId).emit('game:opponent_action', {
+      matchId: data.matchId,
+      action: data.action,
+      value: safeValue,
+      timestamp: Date.now(),
+    });
   }
 
-  private tryMatch(player: QueuedPlayer) {
+  private async tryMatch(player: QueuedPlayer) {
     const opponent = this.matchQueue.find(
       p => p.socketId !== player.socketId &&
+        p.userId !== player.userId &&
         p.gameType === player.gameType &&
         p.mode === player.mode &&
         Math.abs(p.eloRating - player.eloRating) < 300,
     );
 
-    if (opponent) {
-      // 매칭 성사
-      this.matchQueue = this.matchQueue.filter(
-        p => p.socketId !== player.socketId && p.socketId !== opponent.socketId,
-      );
+    if (!opponent) return;
 
-      const matchId = `match_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    // 큐에서 양쪽 제거
+    this.matchQueue = this.matchQueue.filter(
+      p => p.socketId !== player.socketId && p.socketId !== opponent.socketId,
+    );
 
-      // 방 생성
-      const playerSocket = this.server.sockets.sockets.get(player.socketId);
-      const opponentSocket = this.server.sockets.sockets.get(opponent.socketId);
+    const matchId = `match_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-      playerSocket?.join(matchId);
-      opponentSocket?.join(matchId);
+    const playerSocket = this.server.sockets.sockets.get(player.socketId);
+    const opponentSocket = this.server.sockets.sockets.get(opponent.socketId);
 
-      this.activeMatches.set(matchId, {
-        players: [player.userId, opponent.userId],
-        gameType: player.gameType,
-      });
-
-      // 양쪽에게 매칭 알림
-      playerSocket?.emit('match:found', {
-        matchId,
-        gameType: player.gameType,
-        opponent: { id: opponent.userId, eloRating: opponent.eloRating },
-      });
-      opponentSocket?.emit('match:found', {
-        matchId,
-        gameType: player.gameType,
-        opponent: { id: player.userId, eloRating: player.eloRating },
-      });
+    if (!playerSocket || !opponentSocket) {
+      console.warn(`[WS] 매칭 실패 - 소켓 없음: player=${player.socketId}, opponent=${opponent.socketId}`);
+      return;
     }
+
+    playerSocket.join(matchId);
+    opponentSocket.join(matchId);
+
+    this.activeMatches.set(matchId, {
+      players: [player.socketId, opponent.socketId],
+      gameType: player.gameType,
+      readyCount: 0,
+    });
+
+    // Redis에 매칭 기록 저장 (games.service.ts에서 PvP 결과 검증용)
+    await this.redis.set(
+      `pvp_match:${matchId}`,
+      JSON.stringify({ players: [player.userId, opponent.userId], gameType: player.gameType }),
+      'EX', MATCH_RECORD_TTL_SEC,
+    );
+
+    playerSocket.emit('match:found', {
+      matchId,
+      gameType: player.gameType,
+      opponent: { id: opponent.userId, eloRating: opponent.eloRating },
+    });
+    opponentSocket.emit('match:found', {
+      matchId,
+      gameType: player.gameType,
+      opponent: { id: player.userId, eloRating: player.eloRating },
+    });
   }
 }

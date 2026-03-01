@@ -1,28 +1,127 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { api, NeighborhoodBattle, BattleRankEntry } from '../lib/api';
+import { useAuthStore } from '../stores/authStore';
+import { getTier } from '../lib/tier';
+import { GAME_CONFIGS, GameType } from '@donggamerank/shared';
+import type { ChallengeTarget } from './GamePlayPage';
 
-const SCOPES = ['동네', '학교', '구/군', '시/도', '전국'];
+const SCOPES = ['동네', '학교', '구/군', '시/도', '전국', '게임별 도전', '대항전'];
+
+/** 랭킹 진입이 자연스러운 게임들 */
+const CHALLENGE_GAMES: GameType[] = [
+  GameType.SPEED_TAP,
+  GameType.TIMING_HIT,
+  GameType.WHACK_A_MOLE,
+  GameType.MATH_SPEED,
+  GameType.RPS_SPEED,
+  GameType.REVERSE_REACTION,
+];
+
+/* 렌더 간 재생성을 막기 위해 컴포넌트 밖에 선언 */
+const FALLBACK_RANKINGS = Array.from({ length: 20 }, (_, i) => ({
+  rank: i + 1,
+  userId: `mock-${i}`,
+  nickname: `${['빠른', '용감한', '멋진', '강한'][i % 4]}${['호랑이', '독수리', '상어', '용'][i % 4]}${1000 + i}`,
+  eloRating: 1500 - i * 15,
+  regionName: '역삼동',
+}));
 
 export default function RankingsPage() {
   const [activeScope, setActiveScope] = useState(0);
+  const [shareMsg, setShareMsg] = useState('');
   const navigate = useNavigate();
 
-  const mockRankings = Array.from({ length: 20 }, (_, i) => ({
-    rank: i + 1,
-    nickname: `${['빠른', '용감한', '멋진', '강한'][i % 4]}${['호랑이', '독수리', '상어', '용'][i % 4]}${1000 + i}`,
-    elo: 1500 - i * 15,
-    bestGame: ['⏱️', '👆', '⚡', '🎈', '🐹'][i % 5],
-  }));
+  const user = useAuthStore(s => s.user);
+  const myElo = user?.eloRating ?? 0;
+  const myTier = getTier(myElo);
+
+  const [myRank, setMyRank] = useState<{ regionRank?: number; nationalRank?: number; totalPlayers?: number } | null>(null);
+  const [rankings, setRankings] = useState(FALLBACK_RANKINGS);
+  const [rankingsLoading, setRankingsLoading] = useState(true);
+  const [season, setSeason] = useState<{ name: string; endDate: string } | null>(null);
+  const [daysLeft, setDaysLeft] = useState<number | null>(null);
+
+  useEffect(() => {
+    api.getMyRankings().then(setMyRank).catch(() => {});
+    api.getNationalRanking()
+      .then(data => { if (data.length > 0) setRankings(data); })
+      .catch(() => {})
+      .finally(() => setRankingsLoading(false));
+    api.getCurrentSeason()
+      .then(s => {
+        setSeason({ name: s.name, endDate: s.endDate });
+        const diff = new Date(s.endDate).getTime() - Date.now();
+        setDaysLeft(Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24))));
+      })
+      .catch(() => {});
+  }, []);
+
+  const displayRank = myRank?.regionRank ?? myRank?.nationalRank ?? '—';
+
+  const handleShare = async () => {
+    const regionName = user?.regionName ?? '내 동네';
+    const text = `🎮 동겜랭크 ${regionName} ${SCOPES[activeScope]} ${displayRank}위!\nELO: ${myElo.toLocaleString()} | ${myTier.emoji} ${myTier.name} 티어\n나도 해보기: https://donggamerank.app`;
+    if (navigator.share) {
+      try { await navigator.share({ title: '동겜랭크', text }); }
+      catch { /* 취소 */ }
+    } else {
+      await navigator.clipboard.writeText(text);
+      setShareMsg('클립보드에 복사됐어요!');
+      setTimeout(() => setShareMsg(''), 2000);
+    }
+  };
 
   return (
     <div className="p-4">
+      {/* 시즌 종료 카운트다운 */}
+      {season && daysLeft !== null && daysLeft <= 14 && (
+        <div className={`rounded-2xl p-4 mb-4 ${
+          daysLeft <= 3
+            ? 'bg-gradient-to-r from-red-500 to-orange-500'
+            : 'bg-gradient-to-r from-indigo-500 to-purple-600'
+        } text-white`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold opacity-80">🏆 {season.name}</p>
+              <p className="text-lg font-black mt-0.5">
+                {daysLeft === 0 ? '오늘 시즌 종료!' : `${daysLeft}일 후 종료`}
+              </p>
+              <p className="text-xs opacity-70 mt-0.5">
+                {daysLeft <= 3
+                  ? '⚡ 막판 스퍼트! 지금 랭킹을 굳히세요'
+                  : '시즌 보상을 놓치지 마세요. 순위를 확인하세요!'}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-4xl font-black opacity-90">{displayRank}</p>
+              <p className="text-[10px] opacity-60">내 순위</p>
+            </div>
+          </div>
+          {/* TOP 3 보상 미리보기 */}
+          <div className="flex gap-2 mt-3">
+            {[
+              { rank: 1, label: '🥇 1위', reward: '전설 칭호 + 5000코인' },
+              { rank: 2, label: '🥈 2위', reward: '에픽 칭호 + 3000코인' },
+              { rank: 3, label: '🥉 3위', reward: '레어 칭호 + 1500코인' },
+            ].map(r => (
+              <div key={r.rank}
+                className="flex-1 bg-white/15 rounded-xl px-2 py-1.5 text-center">
+                <p className="text-[10px] font-black">{r.label}</p>
+                <p className="text-[9px] opacity-70 leading-tight mt-0.5">{r.reward}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Scope Tabs */}
-      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-4">
+      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-4 overflow-x-auto scrollbar-hide">
         {SCOPES.map((scope, i) => (
           <button
             key={scope}
             onClick={() => setActiveScope(i)}
-            className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
+            className={`flex-shrink-0 flex-1 min-w-0 py-2 px-1 rounded-lg text-xs font-medium transition-colors ${
               activeScope === i ? 'bg-primary text-white shadow' : 'text-gray-500'
             }`}
           >
@@ -31,69 +130,351 @@ export default function RankingsPage() {
         ))}
       </div>
 
-      {/* 외부 게임 랭킹 배너 */}
-      <button onClick={() => navigate('/rankings/external')}
-        className="w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-xl p-4 mb-4 text-white text-left active:scale-[0.98] transition-transform">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="font-black text-sm">🎮 외부 게임 동네 랭킹</p>
-            <p className="text-xs text-white/70 mt-0.5">LoL · 메이플스토리 · FC 온라인</p>
-          </div>
-          <span className="text-white/60 text-xl">→</span>
-        </div>
-      </button>
-
-      {/* My Ranking */}
-      <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl font-black text-primary">#42</span>
-          <div>
-            <p className="font-bold text-sm">나</p>
-            <p className="text-xs text-gray-400">ELO 1,247</p>
-          </div>
-        </div>
-        <span className="text-xs bg-primary text-white rounded-full px-3 py-1">{SCOPES[activeScope]}</span>
-      </div>
-
-      {/* Top 3 */}
-      <div className="flex justify-center gap-4 mb-6">
-        {[1, 0, 2].map((idx) => {
-          const entry = mockRankings[idx];
-          const isFirst = idx === 0;
-          return (
-            <div key={idx} className={`text-center ${isFirst ? '-mt-4' : 'mt-2'}`}>
-              <div className={`w-16 h-16 rounded-full bg-gradient-to-br ${
-                isFirst ? 'from-yellow-400 to-orange-500' : 'from-gray-300 to-gray-400'
-              } flex items-center justify-center text-2xl shadow-lg mx-auto mb-2`}>
-                {entry.bestGame}
+      {/* 게임별 도전 탭 */}
+      {activeScope === 5 ? (
+        <GameChallengeView />
+      ) : activeScope === 6 ? (
+        <NeighborhoodBattleView />
+      ) : (
+        <>
+          {/* 외부 게임 랭킹 배너 */}
+          <button onClick={() => navigate('/rankings/external')}
+            className="w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-xl p-4 mb-4 text-white text-left active:scale-[0.98] transition-transform">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-black text-sm">🎮 외부 게임 동네 랭킹</p>
+                <p className="text-xs text-white/70 mt-0.5">LoL · 메이플스토리 · FC 온라인</p>
               </div>
-              <p className="text-xs font-bold">{entry.nickname.slice(0, 6)}</p>
-              <p className="text-xs text-gray-400">{entry.elo}</p>
-              <span className={`text-lg ${isFirst ? '🥇' : idx === 1 ? '🥈' : '🥉'}`}>
-                {isFirst ? '🥇' : idx === 1 ? '🥈' : '🥉'}
-              </span>
+              <span className="text-white/60 text-xl">→</span>
             </div>
-          );
-        })}
+          </button>
+
+          {/* My Ranking */}
+          <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 mb-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl font-black text-primary">#{displayRank}</span>
+                <div>
+                  <p className="font-bold text-sm">{user?.nickname ?? '나'}</p>
+                  <p className="text-xs text-gray-400">ELO {myElo.toLocaleString()}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                  {myTier.emoji} {myTier.name}
+                </span>
+                <button onClick={handleShare}
+                  className="text-xs bg-primary text-white rounded-full px-3 py-1 active:scale-95 transition-transform">
+                  공유
+                </button>
+              </div>
+            </div>
+            {shareMsg && (
+              <p className="text-center text-xs text-primary font-medium mt-2">{shareMsg}</p>
+            )}
+          </div>
+
+          {rankingsLoading ? (
+            <div className="text-center py-12 text-gray-400 text-sm">랭킹 불러오는 중...</div>
+          ) : (
+            <>
+              {/* Top 3 */}
+              <div className="flex justify-center gap-4 mb-6">
+                {[1, 0, 2].map((idx) => {
+                  const entry = rankings[idx];
+                  if (!entry) return null;
+                  const isFirst = idx === 0;
+                  const entryTier = getTier(entry.eloRating);
+                  return (
+                    <div key={idx} className={`text-center ${isFirst ? '-mt-4' : 'mt-2'}`}>
+                      {/* 1위 챔피언 왕관 */}
+                      {isFirst && (
+                        <div className="text-2xl text-center mb-1 animate-bounce">👑</div>
+                      )}
+                      <div className={`w-16 h-16 rounded-full bg-gradient-to-br ${
+                        isFirst
+                          ? 'from-yellow-400 to-orange-500 ring-4 ring-amber-300 ring-offset-2 ring-offset-white shadow-amber-300/60'
+                          : 'from-gray-300 to-gray-400'
+                      } flex items-center justify-center text-2xl shadow-lg mx-auto mb-2`}>
+                        {entryTier.emoji}
+                      </div>
+                      <p className="text-xs font-bold">{entry.nickname.slice(0, 6)}</p>
+                      <p className="text-[10px] text-gray-400">{entry.eloRating}</p>
+                      <span className="text-lg">
+                        {isFirst ? '🥇' : idx === 1 ? '🥈' : '🥉'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Rankings List */}
+              <div className="space-y-2">
+                {rankings.slice(3).map((entry) => {
+                  const entryTier = getTier(entry.eloRating);
+                  return (
+                    <div
+                      key={entry.userId ?? entry.rank}
+                      className="bg-white rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm border border-gray-100"
+                    >
+                      <span className="w-8 text-center font-bold text-gray-400">{entry.rank}</span>
+                      <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-lg">
+                        {entryTier.emoji}
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium text-sm">{entry.nickname}</p>
+                        <p className="text-[10px] text-gray-400">{entryTier.emoji} {entryTier.name}</p>
+                      </div>
+                      <span className="text-sm font-bold text-primary mr-1">{entry.eloRating}</span>
+                      <button
+                        onClick={() => { setActiveScope(5); }}
+                        className="text-xs bg-orange-100 text-orange-600 rounded-full px-2 py-1 font-bold active:scale-95 transition-transform flex-shrink-0"
+                        title="도전하기"
+                      >
+                        ⚔️
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ── 게임별 도전 뷰 ── */
+
+function GameChallengeView() {
+  const navigate = useNavigate();
+  const [selectedGame, setSelectedGame] = useState<GameType>(GameType.SPEED_TAP);
+  const [challengeTarget, setChallengeTarget] = useState<ChallengeTarget | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [gameRankings, setGameRankings] = useState<{ rank: number; userId: string; nickname?: string; score: number }[]>([]);
+
+  // 선택된 게임의 도전 타겟(동네 1위) 자동 조회
+  useEffect(() => {
+    setLoading(true);
+    setChallengeTarget(null);
+    setGameRankings([]);
+    api.getChallengeTarget(selectedGame)
+      .then(t => { if (t) setChallengeTarget(t); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [selectedGame]);
+
+  const config = GAME_CONFIGS[selectedGame];
+
+  return (
+    <div className="space-y-4">
+      {/* 게임 선택 */}
+      <div>
+        <p className="text-xs text-gray-400 font-medium mb-2">어떤 게임으로 도전할까요?</p>
+        <div className="grid grid-cols-3 gap-2">
+          {CHALLENGE_GAMES.map(g => {
+            const cfg = GAME_CONFIGS[g];
+            return (
+              <button
+                key={g}
+                onClick={() => setSelectedGame(g)}
+                className={`flex flex-col items-center py-3 rounded-xl border text-center transition-all ${
+                  selectedGame === g
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-gray-200 bg-white text-gray-600'
+                }`}
+              >
+                <span className="text-2xl mb-1">{cfg.icon}</span>
+                <span className="text-[10px] font-medium leading-tight">{cfg.name}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Rankings List */}
-      <div className="space-y-2">
-        {mockRankings.slice(3).map((entry) => (
-          <div
-            key={entry.rank}
-            className="bg-white rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm border border-gray-100"
-          >
-            <span className="w-8 text-center font-bold text-gray-400">{entry.rank}</span>
-            <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-lg">
-              {entry.bestGame}
+      {/* 동네 1위 도전 카드 */}
+      {loading ? (
+        <div className="text-center py-8 text-gray-400 text-sm">불러오는 중...</div>
+      ) : challengeTarget ? (
+        <div className="bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl p-5 text-white">
+          <p className="text-xs opacity-70 mb-1">동네 1위</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-2xl font-black">{challengeTarget.nickname}</p>
+              <p className="text-4xl font-black mt-1">{challengeTarget.score}</p>
+              <p className="text-xs opacity-60 mt-0.5">{config.scoreMetric}</p>
             </div>
-            <div className="flex-1">
-              <p className="font-medium text-sm">{entry.nickname}</p>
-            </div>
-            <span className="text-sm font-bold text-primary">{entry.elo}</span>
+            <div className="text-5xl opacity-80">🏆</div>
           </div>
-        ))}
+          <button
+            onClick={() => navigate(`/play/${selectedGame}`, { state: { challengeTarget } })}
+            className="w-full mt-4 bg-white text-orange-600 font-black py-3 rounded-xl
+                       active:scale-95 transition-transform text-sm">
+            ⚔️ {challengeTarget.nickname} 기록에 도전!
+          </button>
+          {challengeTarget.scoreTimeline.length === 0 && (
+            <p className="text-center text-xs opacity-50 mt-2">
+              * 첫 플레이라 실시간 비교는 다음 판부터 가능해요
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="bg-gray-50 rounded-2xl p-8 text-center">
+          <p className="text-4xl mb-3">{config.icon}</p>
+          <p className="font-bold text-gray-600 text-sm mb-1">아직 기록이 없어요</p>
+          <p className="text-gray-400 text-xs mb-4">이 게임의 첫 기록 보유자가 되어보세요!</p>
+          <button
+            onClick={() => navigate(`/play/${selectedGame}`)}
+            className="bg-primary text-white px-6 py-2.5 rounded-xl font-bold text-sm active:scale-95 transition-transform">
+            {config.icon} 먼저 플레이하기
+          </button>
+        </div>
+      )}
+
+      {/* 도전 방법 안내 */}
+      <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
+        <p className="font-bold text-sm text-blue-800">💡 도전 모드란?</p>
+        <p className="text-xs text-blue-600 mt-1">
+          상대방의 점수 기록이 실시간으로 보여요. 플레이 중 "앞서는 중 / 뒤처지는 중"이 표시되니
+          더 짜릿하게 경쟁할 수 있어요!
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ── 동네 대항전 뷰 ── */
+
+function NeighborhoodBattleView() {
+  const [battle, setBattle] = useState<NeighborhoodBattle | null>(null);
+  const [rankings, setRankings] = useState<BattleRankEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const MOCK_BATTLE: NeighborhoodBattle = {
+    id: 'battle-1',
+    regionAId: 'region-a',
+    regionBId: 'region-b',
+    regionAName: '역삼동',
+    regionBName: '삼성동',
+    regionAScore: 142500,
+    regionBScore: 118300,
+    startAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+    endAt: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString(),
+    isActive: true,
+  };
+
+  const MOCK_RANKINGS: BattleRankEntry[] = Array.from({ length: 5 }, (_, i) => ({
+    rank: i + 1,
+    userId: `user-${i}`,
+    nickname: `기여자${i + 1}`,
+    contribution: 15000 - i * 2500,
+    regionId: 'region-a',
+  }));
+
+  useEffect(() => {
+    // regionId를 넘기지 않으면 서버가 JWT에서 사용자 지역을 자동 판단
+    api.getCurrentBattle()
+      .then(b => {
+        setBattle(b);
+        if (!b) return null;
+        return api.getBattleRankings(b.id);
+      })
+      .then(r => { if (r) setRankings(r); })
+      .catch(() => {
+        setBattle(MOCK_BATTLE);
+        setRankings(MOCK_RANKINGS);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return <div className="text-center py-12 text-gray-400 text-sm">로딩 중...</div>;
+  }
+
+  if (!battle) {
+    return (
+      <div className="text-center py-12 text-gray-400">
+        <p className="text-4xl mb-3">⚔️</p>
+        <p className="font-bold">현재 진행 중인 대항전이 없습니다.</p>
+      </div>
+    );
+  }
+
+  const totalScore = battle.regionAScore + battle.regionBScore;
+  const aRatio = totalScore > 0 ? (battle.regionAScore / totalScore) * 100 : 50;
+
+  const endMs = new Date(battle.endAt).getTime() - Date.now();
+  const endDays = Math.floor(endMs / (1000 * 60 * 60 * 24));
+  const endHours = Math.floor((endMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const timeLeft = endDays > 0 ? `D-${endDays}` : `${endHours}시간 남음`;
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-gradient-to-br from-red-500 to-orange-500 rounded-2xl p-5 text-white">
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-xs opacity-70">주간 동네 대항전</p>
+          <span className="text-xs bg-white/20 rounded-full px-2 py-0.5 font-bold">{timeLeft}</span>
+        </div>
+        <div className="flex items-center justify-between mt-4">
+          <div className="text-center flex-1">
+            <p className="text-xl font-black">{battle.regionAName ?? '우리 동네'}</p>
+            <p className="text-3xl font-black mt-1">{battle.regionAScore.toLocaleString()}</p>
+            <p className="text-xs opacity-60 mt-0.5">점수</p>
+          </div>
+          <div className="text-3xl font-black opacity-40 flex-shrink-0">VS</div>
+          <div className="text-center flex-1">
+            <p className="text-xl font-black">{battle.regionBName ?? '상대 동네'}</p>
+            <p className="text-3xl font-black mt-1">{battle.regionBScore.toLocaleString()}</p>
+            <p className="text-xs opacity-60 mt-0.5">점수</p>
+          </div>
+        </div>
+        <div className="mt-4">
+          <div className="w-full h-3 bg-white/20 rounded-full overflow-hidden flex">
+            <div
+              className="h-full bg-white rounded-l-full transition-all duration-500"
+              style={{ width: `${aRatio}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-[10px] opacity-60 mt-1">
+            <span>{aRatio.toFixed(1)}%</span>
+            <span>{(100 - aRatio).toFixed(1)}%</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-orange-50 rounded-xl p-4 border border-orange-100">
+        <p className="font-bold text-sm text-orange-800">🎮 게임을 하면 동네에 기여해요!</p>
+        <p className="text-xs text-orange-600 mt-1">
+          게임 결과의 점수가 우리 동네 총점에 합산됩니다. 많이 플레이할수록 동네가 강해져요!
+        </p>
+      </div>
+
+      <div>
+        <h3 className="font-bold text-sm mb-3">🏆 우리 동네 기여 순위</h3>
+        {rankings.length === 0 ? (
+          <div className="bg-gray-50 rounded-xl p-6 text-center text-gray-400 text-sm">
+            아직 기여자가 없습니다.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {rankings.map((entry) => (
+              <div key={entry.userId}
+                className="bg-white rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm border border-gray-100">
+                <span className="w-6 text-center font-black text-gray-400 text-sm">{entry.rank}</span>
+                <div className="w-9 h-9 rounded-full bg-orange-100 flex items-center justify-center text-lg">
+                  {['🥇', '🥈', '🥉', '4️⃣', '5️⃣'][entry.rank - 1] ?? '🎮'}
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium text-sm">{entry.nickname}</p>
+                </div>
+                <span className="text-sm font-bold text-orange-600">
+                  +{entry.contribution.toLocaleString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

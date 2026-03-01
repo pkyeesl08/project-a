@@ -1,11 +1,15 @@
 import {
   Entity, PrimaryGeneratedColumn, Column, CreateDateColumn,
-  ManyToOne, JoinColumn,
+  ManyToOne, JoinColumn, Index,
 } from 'typeorm';
 import { UserEntity } from '../users/user.entity';
 import { RegionEntity } from '../regions/region.entity';
 
 @Entity('game_results')
+@Index(['userId', 'gameType'])
+@Index(['userId', 'playedAt'])
+@Index(['regionId', 'gameType'])
+@Index(['playedAt'])
 export class GameResultEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;

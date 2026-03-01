@@ -28,23 +28,26 @@ import BiggerNumberGame from './BiggerNumberGame';
 import SamePictureGame from './SamePictureGame';
 import OddEvenGame from './OddEvenGame';
 // 🎮 액션/모션
-import ShakeItGame from './ShakeItGame';
 import DirectionSwipeGame from './DirectionSwipeGame';
-import TiltBalanceGame from './TiltBalanceGame';
 import StopTheBarGame from './StopTheBarGame';
 import RpsSpeedGame from './RpsSpeedGame';
+import SequenceTapGame from './SequenceTapGame';
+import ReverseReactionGame from './ReverseReactionGame';
 // 🎯 정밀/집중
 import LineTraceGame from './LineTraceGame';
 import TargetSniperGame from './TargetSniperGame';
 import DarkRoomTapGame from './DarkRoomTapGame';
 import ScrewCenterGame from './ScrewCenterGame';
 import LineGrowGame from './LineGrowGame';
+import DualPrecisionGame from './DualPrecisionGame';
+import RapidAimGame from './RapidAimGame';
 // 🌟 특수/파티
 import MathSpeedGame from './MathSpeedGame';
-import MicShoutGame from './MicShoutGame';
 import ShellGame from './ShellGame';
 import EmojiSortGame from './EmojiSortGame';
 import CountMoreGame from './CountMoreGame';
+// 🧠 퍼즐/기억
+import ReverseMemoryGame from './ReverseMemoryGame';
 
 const REGISTRY: Partial<Record<GameType, React.ComponentType<GameComponentProps>>> = {
   [GameType.TIMING_HIT]:         TimingHitGame,
@@ -59,23 +62,25 @@ const REGISTRY: Partial<Record<GameType, React.ComponentType<GameComponentProps>
   [GameType.SAME_PICTURE]:       SamePictureGame,
   [GameType.ODD_EVEN]:           OddEvenGame,
 
-  [GameType.SHAKE_IT]:           ShakeItGame,
   [GameType.DIRECTION_SWIPE]:    DirectionSwipeGame,
-  [GameType.TILT_BALANCE]:       TiltBalanceGame,
   [GameType.STOP_THE_BAR]:       StopTheBarGame,
   [GameType.RPS_SPEED]:          RpsSpeedGame,
+  [GameType.SEQUENCE_TAP]:       SequenceTapGame,
+  [GameType.REVERSE_REACTION]:   ReverseReactionGame,
 
   [GameType.LINE_TRACE]:         LineTraceGame,
   [GameType.TARGET_SNIPER]:      TargetSniperGame,
   [GameType.DARK_ROOM_TAP]:      DarkRoomTapGame,
   [GameType.SCREW_CENTER]:       ScrewCenterGame,
   [GameType.LINE_GROW]:          LineGrowGame,
+  [GameType.DUAL_PRECISION]:     DualPrecisionGame,
+  [GameType.RAPID_AIM]:          RapidAimGame,
 
   [GameType.MATH_SPEED]:         MathSpeedGame,
-  [GameType.MIC_SHOUT]:          MicShoutGame,
   [GameType.SHELL_GAME]:         ShellGame,
   [GameType.EMOJI_SORT]:         EmojiSortGame,
   [GameType.COUNT_MORE]:         CountMoreGame,
+  [GameType.REVERSE_MEMORY]:     ReverseMemoryGame,
 };
 
 /* ── Fallback (미구현 게임) ── */

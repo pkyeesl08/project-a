@@ -38,7 +38,11 @@ export class UsersController {
   }
 
   @Get(':id/stats')
-  async getStats(@Param('id') id: string) {
-    return ok(await this.usersService.getStats(id));
+  @UseGuards(JwtAuthGuard)
+  async getStats(
+    @Param('id') id: string,
+    @CurrentUserId() requestingUserId: string,
+  ) {
+    return ok(await this.usersService.getStats(id, requestingUserId));
   }
 }

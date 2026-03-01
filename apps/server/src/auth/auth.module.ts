@@ -9,9 +9,17 @@ import { UsersModule } from '../users/users.module';
 @Module({
   imports: [
     PassportModule,
-    JwtModule.register({
-      secret: process.env.JWT_SECRET || 'dev-secret-change-in-production',
-      signOptions: { expiresIn: '7d' },
+    JwtModule.registerAsync({
+      useFactory: () => {
+        const secret = process.env.JWT_SECRET;
+        if (!secret && process.env.NODE_ENV === 'production') {
+          throw new Error('JWT_SECRET 환경 변수가 설정되지 않았습니다.');
+        }
+        return {
+          secret: secret || 'dev-secret-change-in-production',
+          signOptions: { expiresIn: '7d' },
+        };
+      },
     }),
     UsersModule,
   ],

@@ -30,11 +30,31 @@ export class UserEntity {
   @Column({ type: 'uuid', nullable: true })
   schoolId: string | null;
 
+  /** 마지막 동네 변경 일시 — 7일 쿨다운 계산에 사용 */
+  @Column({ type: 'timestamp', nullable: true })
+  regionChangedAt: Date | null;
+
   @Column({ type: 'boolean', default: false })
   isPublic: boolean;
 
   @Column({ type: 'integer', default: 1000 })
   eloRating: number;
+
+  /** 무료 재화 — 게임/미션 완료 시 획득, 코인 상점 아이템 구매에 사용 */
+  @Column({ type: 'integer', default: 0 })
+  coins: number;
+
+  /** 프리미엄 재화 — 인앱 결제로 충전, 프리미엄 상점 아이템 구매에 사용 */
+  @Column({ type: 'integer', default: 0 })
+  gems: number;
+
+  /** 누적 경험치 — 계정 레벨 계산에 사용 */
+  @Column({ type: 'integer', default: 0 })
+  xp: number;
+
+  /** 계정 레벨 — xp 기반 자동 갱신 (1~100) */
+  @Column({ type: 'integer', default: 1 })
+  level: number;
 
   @CreateDateColumn()
   createdAt: Date;
