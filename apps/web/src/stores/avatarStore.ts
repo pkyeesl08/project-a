@@ -78,6 +78,7 @@ export interface EquippedAvatar {
   activeLips: AvatarItem | null;
   activeTitle: AvatarItem | null;
   activeEffect: AvatarItem | null;
+  activeFrame?: AvatarItem | null;
 }
 
 interface AvatarState {

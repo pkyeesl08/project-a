@@ -67,7 +67,7 @@ export class GachaService {
 
     // Redis 세마포어 — 동시 뽑기 요청 차단 (5초 TTL)
     const lockKey = `gacha:lock:${userId}`;
-    const acquired = await this.redis.set(lockKey, '1', 'NX', 'EX', 5);
+    const acquired = await this.redis.set(lockKey, '1', 'EX', 5, 'NX');
     if (!acquired) {
       throw new BadRequestException('뽑기가 이미 진행 중입니다. 잠시 후 다시 시도해주세요.');
     }

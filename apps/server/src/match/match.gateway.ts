@@ -74,7 +74,7 @@ export class MatchGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     }
   }
 
-  handleConnection(client: Socket) {
+  async handleConnection(client: Socket) {
     // JWT 토큰 검증 (handshake.auth.token 또는 Authorization 헤더)
     const token =
       (client.handshake.auth as Record<string, string>)?.token ??

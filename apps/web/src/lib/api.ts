@@ -382,7 +382,7 @@ class ApiClient {
     return this.request<any>(`/avatar/equip/${itemId}`, { method: 'POST' });
   }
 
-  unequipSlot(slot: 'frame' | 'icon' | 'title' | 'effect') {
+  unequipSlot(slot: string) {
     return this.request<any>(`/avatar/unequip/${slot}`, { method: 'DELETE' });
   }
 

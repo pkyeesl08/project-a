@@ -55,7 +55,7 @@ async function seed() {
   await regionRepo.delete({});
 
   // Regions
-  const savedRegions = [];
+  const savedRegions: any[] = [];
   for (const r of REGIONS) {
     const region = await regionRepo.save({
       name: r.name, district: r.district, city: r.city,

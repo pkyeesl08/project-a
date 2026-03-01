@@ -11,6 +11,7 @@ interface User {
   isPublic: boolean;
   xp: number;
   level: number;
+  primaryRegionId?: string;
 }
 
 interface AuthState {

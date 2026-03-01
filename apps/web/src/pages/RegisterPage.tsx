@@ -94,6 +94,8 @@ export default function RegisterPage() {
           regionName: '',
           schoolName: null,
           isPublic: false,
+          xp: 0,
+          level: 1,
         },
         result.accessToken,
       );

@@ -9,7 +9,7 @@ const HANDS = [
 ] as const;
 
 export default function RpsSpeedGame({ onScore, isPlaying }: GameComponentProps) {
-  const [ai, setAi] = useState(HANDS[0]);
+  const [ai, setAi] = useState<typeof HANDS[number]>(HANDS[0]);
   const [result, setResult] = useState<'win' | 'lose' | null>(null);
 
   const next = useCallback(() => {
