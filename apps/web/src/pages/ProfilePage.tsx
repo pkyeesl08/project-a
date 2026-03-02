@@ -648,8 +648,8 @@ function FriendsTab() {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(pos => {
         api.getMapUsers(pos.coords.latitude, pos.coords.longitude, 3)
-          .then((users: any[]) => {
-            setSuggestions(users.slice(0, 6));
+          .then((users) => {
+            setSuggestions((users as any[]).slice(0, 6));
           })
           .catch(() => {});
       }, () => {/* 위치 거부 시 조용히 무시 */});

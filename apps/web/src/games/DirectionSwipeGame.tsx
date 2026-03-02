@@ -10,7 +10,7 @@ const DIRS = [
 ] as const;
 
 export default function DirectionSwipeGame({ onScore, isPlaying }: GameComponentProps) {
-  const [dir, setDir] = useState(DIRS[0]);
+  const [dir, setDir] = useState<typeof DIRS[number]>(DIRS[0]);
 
   const next = useCallback(() => {
     setDir(DIRS[Math.floor(Math.random() * 4)]);

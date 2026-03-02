@@ -2,7 +2,7 @@ import {
   Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { CurrentUserId } from '../auth/current-user.decorator';
+import { CurrentUserId } from '../common/auth.types';
 import { BoardsService } from './boards.service';
 import { BoardCategory } from './board-post.entity';
 import { ok } from '../common/response';
