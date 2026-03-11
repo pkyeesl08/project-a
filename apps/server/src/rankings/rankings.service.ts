@@ -12,7 +12,7 @@ import { REDIS_CLIENT } from '../redis/redis.module';
  * - ZCARD: 총 참가자 수
  */
 
-interface RankEntry {
+export interface RankEntry {
   userId: string;
   score: number;
   rank: number;

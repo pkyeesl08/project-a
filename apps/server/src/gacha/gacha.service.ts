@@ -186,7 +186,7 @@ export class GachaService {
   }
 }
 
-interface GachaResult {
+export interface GachaResult {
   rarity: ItemRarity;
   item: AvatarItemEntity | null;
   isDuplicate: boolean;
